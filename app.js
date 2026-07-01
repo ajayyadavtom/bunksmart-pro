@@ -1077,3 +1077,67 @@ async function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+/* ==========================================
+   PREMIUM UPGRADE & UPI QR CODE SYSTEM
+   ========================================== */
+(function() {
+    // This is the secret code you will text them on WhatsApp
+    const SECRET_CODE = "VTU2026"; 
+
+    function injectPremiumUI() {
+        // If they already paid and entered the code, don't show the button
+        if (localStorage.getItem('isPremium') === 'true') return;
+
+        // 1. Create the Floating "Unlock" Button
+        const btn = document.createElement('button');
+        btn.innerHTML = "⭐ Unlock Lifetime History";
+        btn.style.cssText = "position:fixed;bottom:80px;right:20px;background:#6366f1;color:white;padding:12px 20px;border-radius:99px;font-weight:bold;box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);z-index:9999;border:none;cursor:pointer;";
+        
+        // 2. Create the Dark-Mode Payment Popup Screen
+        const modal = document.createElement('div');
+        modal.style.cssText = "display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(9,9,11,0.9);backdrop-filter:blur(10px);z-index:10000;justify-content:center;align-items:center;";
+        modal.innerHTML = `
+            <div style="background:#18181b;border:1px solid #27272a;padding:30px;border-radius:16px;text-align:center;max-width:90%;width:350px;">
+                <h2 style="color:white;font-size:24px;margin-bottom:10px;">Upgrade to Pro 🚀</h2>
+                <p style="color:#a1a1aa;font-size:14px;margin-bottom:20px;">Free accounts auto-delete history every 2 months. Pay just <b>₹20</b> once to unlock lifetime storage.</p>
+                
+                <div style="background:#09090b;padding:15px;border-radius:8px;margin-bottom:20px;color:#cbd5e1;">
+                    Scan to pay ₹20:<br>
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=ajaytom@ptyes&pn=BunkSmart&am=20&cu=INR" alt="UPI QR" style="margin: 10px auto; border-radius: 8px; background: white; padding: 5px; width: 150px; height: 150px;"><br>
+                    <b style="color:white;font-size:16px;">UPI: ajaytom@ptyes</b><br>
+                    <span style="font-size:13px;color:#10b981;font-weight:bold;"><br>Screenshot payment and WhatsApp to:<br>+91 7996490057</span><br>
+                    <span style="font-size:11px;color:#a1a1aa;">(Message admin to get your secret unlock code)</span>
+                </div>
+
+                <input id="activationCode" type="text" placeholder="Enter Secret Code" style="width:100%;padding:12px;border-radius:8px;border:1px solid #3f3f46;background:#27272a;color:white;margin-bottom:15px;text-align:center;">
+                
+                <button id="verifyBtn" style="width:100%;background:#10b981;color:white;padding:12px;border-radius:8px;font-weight:bold;border:none;margin-bottom:10px;cursor:pointer;">Verify & Unlock</button>
+                <button id="closeModal" style="width:100%;background:transparent;color:#a1a1aa;padding:12px;border:none;cursor:pointer;">Cancel</button>
+            </div>
+        `;
+
+        document.body.appendChild(btn);
+        document.body.appendChild(modal);
+
+        // 3. Make the buttons actually work when tapped
+        btn.onclick = () => modal.style.display = "flex";
+        document.getElementById('closeModal').onclick = () => modal.style.display = "none";
+        
+        document.getElementById('verifyBtn').onclick = () => {
+            const val = document.getElementById('activationCode').value.trim();
+            if (val === SECRET_CODE) {
+                localStorage.setItem('isPremium', 'true');
+                alert("Pro Unlocked! Your attendance history is now permanent.");
+                btn.remove();
+                modal.remove();
+            } else {
+                alert("Invalid activation code. Please try again.");
+            }
+        };
+    }
+
+    // Launch the scanner button automatically when the page loads
+    window.addEventListener('DOMContentLoaded', injectPremiumUI);
+})();
+
