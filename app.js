@@ -16,12 +16,14 @@ const GRADE_ORDER = ["O", "A+", "A", "B+", "B", "C", "P", "F"];
    left as placeholders or if the network/CDN is unreachable.
    --------------------------------------------------------- */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  const firebaseConfig = {
+  apiKey: "AIza...",
+  authDomain: "bunksmart-pro.firebaseapp.com",
+  projectId: "bunksmart-pro",
+  storageBucket: "bunksmart-pro.firebasestorage.app",
+  messagingSenderId: "16947399306",
+  appId: "1:16947399306:web:...",
+  measurementId: "G-..."
 };
 
 let fb = null; // populated by initFirebase() if configured + reachable
