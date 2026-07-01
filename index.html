@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<title>BunkSmart Pro — Attendance & SGPA Command Center</title>
+<meta name="description" content="Time-locked daily attendance tracking and VTU SGPA prediction for engineering students." />
+<meta name="theme-color" content="#09090b" />
+<!-- To make this installable as a home-screen PWA, add a manifest.json (name, icons,
+     display:"standalone", theme_color) and a service worker, then link them here:
+     <link rel="manifest" href="manifest.json" /> -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%236366F1'/%3E%3C/svg%3E" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          obsidian: { 950: '#09090b', 900: '#0d0d10', 800: '#141417', 700: '#1c1c21', 600: '#26262c' },
+          accent: { DEFAULT: '#6366F1', dim: '#4F46E5', glow: '#818CF8' },
+          go: '#22C55E', warn: '#F59E0B', bunk: '#F43F5E',
+        },
+        fontFamily: {
+          sans: ['"Inter"', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-obsidian-950 text-zinc-200 font-sans min-h-screen no-select">
+
+<div class="grain-overlay" aria-hidden="true"></div>
+<div class="accent-glow" aria-hidden="true"></div>
+
+<!-- ============ FIXED HEADER ============ -->
+<header class="fixed top-0 inset-x-0 z-40 header-shell">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <div class="leading-tight">
+        <p class="font-semibold text-[15px] tracking-tight text-white">BunkSmart <span class="text-accent-glow">Pro</span></p>
+        <p class="text-[11px] text-zinc-500 font-mono -mt-0.5" id="header-date">—</p>
+      </div>
+    </div>
+
+    <nav class="hidden md:flex items-center gap-0.5 p-1 rounded-xl bg-obsidian-800/70 border border-white/[0.06]" id="tabs-desktop">
+      <button data-tab="dashboard" class="tab-btn is-active">Dashboard</button>
+      <button data-tab="history" class="tab-btn">History &amp; Analytics</button>
+      <button data-tab="sgpa" class="tab-btn">SGPA Hub</button>
+      <button data-tab="control" class="tab-btn">Control Center</button>
+    </nav>
+
+    <div id="auth-slot">
+      <button id="signin-btn" class="signin-btn">
+        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.1 5.4 29.3 3.5 24 3.5 12.7 3.5 3.5 12.7 3.5 24S12.7 44.5 24 44.5 44.5 35.3 44.5 24c0-1.2-.1-2.3-.3-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.1 6.4 29.3 4.5 24 4.5c-7.7 0-14.3 4.3-17.7 10.2z"/><path fill="#4CAF50" d="M24 44.5c5.2 0 9.9-1.8 13.6-4.9l-6.3-5.3c-2.1 1.5-4.8 2.4-7.3 2.4-5.3 0-9.7-3.1-11.3-7.5l-6.5 5C9.6 40.1 16.3 44.5 24 44.5z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.7l6.3 5.3c-.4.4 6.7-4.9 6.7-15 0-1.2-.1-2.3-.3-3.5z"/></svg>
+        <span>Sign in with Google</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ============ MAIN ============ -->
+<main class="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-24 pb-28 md:pb-16">
+
+  <!-- ============ TAB: DASHBOARD ============ -->
+  <section id="panel-dashboard" class="tab-panel space-y-6">
+
+    <div class="fade-in flex items-start justify-between flex-wrap gap-4">
+      <div>
+        <p class="eyebrow" id="dash-eyebrow">Roll Call</p>
+        <h1 class="page-title" id="dash-heading">Dashboard</h1>
+      </div>
+      <div class="clock-chip">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="text-accent-glow"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3.5 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span class="font-mono text-sm tabular-nums" id="live-clock">--:--:--</span>
+      </div>
+    </div>
+
+    <div id="rollcall-widget" class="fade-in delay-1"></div>
+
+    <div>
+      <div class="flex items-center justify-between mb-3 fade-in delay-2">
+        <h2 class="section-heading">Live Overview</h2>
+        <span class="text-[11px] text-zinc-500 font-mono" id="overview-overall">—</span>
+      </div>
+      <div id="subject-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 fade-in delay-2"></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: HISTORY & ANALYTICS ============ -->
+  <section id="panel-history" class="tab-panel hidden space-y-6">
+    <div class="fade-in">
+      <p class="eyebrow">Analytics</p>
+      <h1 class="page-title">History &amp; Analytics</h1>
+      <p class="page-sub">Tap any past day to review or correct what was logged.</p>
+    </div>
+
+    <div class="glass-card p-4 sm:p-5 fade-in delay-1">
+      <div class="flex items-center justify-between mb-4">
+        <button id="cal-prev" class="icon-btn" aria-label="Previous month">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <h3 class="font-semibold text-white text-sm tracking-wide" id="cal-month-label">—</h3>
+        <button id="cal-next" class="icon-btn" aria-label="Next month">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="grid grid-cols-7 gap-1.5 mb-2 text-center">
+        <span class="cal-dow">S</span><span class="cal-dow">M</span><span class="cal-dow">T</span><span class="cal-dow">W</span><span class="cal-dow">T</span><span class="cal-dow">F</span><span class="cal-dow">S</span>
+      </div>
+      <div id="cal-grid" class="grid grid-cols-7 gap-1.5"></div>
+      <div class="flex items-center gap-4 mt-4 pt-4 border-t border-white/[0.06] text-[11px] text-zinc-500">
+        <span class="flex items-center gap-1.5"><i class="dot" style="background:#22C55E"></i>Full attendance</span>
+        <span class="flex items-center gap-1.5"><i class="dot" style="background:#F59E0B"></i>Partial</span>
+        <span class="flex items-center gap-1.5"><i class="dot" style="background:#F43F5E"></i>Full bunk</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: SGPA HUB ============ -->
+  <section id="panel-sgpa" class="tab-panel hidden space-y-6">
+    <div class="fade-in">
+      <p class="eyebrow">Report Card</p>
+      <h1 class="page-title">SGPA Hub</h1>
+      <p class="page-sub">Tap a grade for each subject — your SGPA updates instantly.</p>
+    </div>
+
+    <!-- Circular progress ring -->
+    <div class="glass-card p-6 flex flex-col sm:flex-row items-center gap-6 fade-in delay-1">
+      <div class="relative shrink-0" style="width:148px;height:148px;">
+        <svg width="148" height="148" viewBox="0 0 148 148" class="-rotate-90">
+          <circle cx="74" cy="74" r="64" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="12"/>
+          <circle id="sgpa-ring" cx="74" cy="74" r="64" fill="none" stroke="#6366F1" stroke-width="12" stroke-linecap="round" stroke-dasharray="402.1" stroke-dashoffset="402.1"/>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span class="font-mono font-bold text-3xl text-white" id="sgpa-value">0.00</span>
+          <span class="text-[10px] uppercase tracking-widest text-zinc-500 mt-0.5">SGPA / 10</span>
+        </div>
+      </div>
+      <div class="flex-1 grid grid-cols-2 gap-3 w-full">
+        <div class="stat-tile"><span class="stat-label">Subjects</span><span class="stat-value" id="sgpa-subject-count">0</span></div>
+        <div class="stat-tile"><span class="stat-label">Total Credits</span><span class="stat-value" id="sgpa-credit-count">0</span></div>
+      </div>
+    </div>
+
+    <!-- Subject grid -->
+    <div class="fade-in delay-2">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="section-heading">Subjects</h2>
+        <button id="sgpa-add-subject" class="ghost-btn">+ Add subject</button>
+      </div>
+      <div id="sgpa-subject-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5"></div>
+    </div>
+
+    <!-- Target SEE predictor -->
+    <div class="glass-card p-5 fade-in delay-3">
+      <h2 class="section-heading mb-4">Target SEE Predictor</h2>
+      <div class="grid sm:grid-cols-3 gap-4 items-end">
+        <div>
+          <label class="field-label">Internal Assessment (IA) / 50</label>
+          <input id="pred-ia" type="number" min="0" max="50" step="0.5" placeholder="e.g. 42" class="field-input" />
+        </div>
+        <div>
+          <label class="field-label">Target grade</label>
+          <select id="pred-grade" class="field-select">
+            <option value="90">O — Outstanding (90–100)</option>
+            <option value="80" selected>A+ — Excellent (80–89)</option>
+            <option value="70">A — Very Good (70–79)</option>
+            <option value="60">B+ — Good (60–69)</option>
+            <option value="50">B — Above Average (50–59)</option>
+            <option value="45">C — Average (45–49)</option>
+            <option value="40">P — Pass (40–44)</option>
+          </select>
+        </div>
+        <button id="pred-calc-btn" class="primary-btn h-[42px]">Calculate</button>
+      </div>
+      <div id="pred-result" class="result-panel mt-4"></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: CONTROL CENTER ============ -->
+  <section id="panel-control" class="tab-panel hidden space-y-6">
+    <div class="fade-in">
+      <p class="eyebrow">Configuration</p>
+      <h1 class="page-title">Control Center</h1>
+      <p class="page-sub">Attendance target, weekends, and your weekly period timetable.</p>
+    </div>
+
+    <div class="glass-card p-5 fade-in delay-1">
+      <h2 class="section-heading mb-4">Target &amp; Weekends</h2>
+      <div class="grid sm:grid-cols-2 gap-6">
+        <div>
+          <label class="field-label">Target attendance percentage</label>
+          <div class="flex items-center gap-3">
+            <input id="target-slider" type="range" min="50" max="90" step="1" value="75" class="flex-1 accent-slider" />
+            <span class="font-mono text-accent-glow font-semibold text-sm w-12 text-right" id="target-slider-value">75%</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Weekend days off</label>
+          <div class="flex items-center gap-5">
+            <label class="switch-row">
+              <input type="checkbox" id="toggle-saturday" class="switch-input" />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="text-sm text-zinc-300">Saturday</span>
+            </label>
+            <label class="switch-row">
+              <input type="checkbox" id="toggle-sunday" class="switch-input" />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="text-sm text-zinc-300">Sunday</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass-card p-5 fade-in delay-2">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="section-heading">Weekly Timetable</h2>
+        <span class="text-[11px] text-zinc-500 font-mono">times are 24h, e.g. 09:00</span>
+      </div>
+      <div id="timetable-builder" class="space-y-5"></div>
+    </div>
+
+    <div class="danger-card p-5 fade-in delay-3">
+      <h2 class="section-heading text-bunk mb-2">Danger Zone</h2>
+      <p class="text-sm text-zinc-400 mb-4">Permanently erase your timetable, attendance history, SGPA data and settings from this device (and cloud, if signed in).</p>
+      <button id="wipe-data-btn" class="danger-btn">Reset All Data</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ MOBILE BOTTOM NAV ============ -->
+<nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bottom-nav" id="tabs-mobile">
+  <div class="flex items-stretch justify-around px-1 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+    <button data-tab="dashboard" class="mobile-tab-btn is-active">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 12l1.6-1.4M4 12l8-7 8 7M4 12v7a1 1 0 001 1h4a1 1 0 001-1v-4h4v4a1 1 0 001 1h4a1 1 0 001-1v-7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button data-tab="history" class="mobile-tab-btn">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 9.5h17M8 3v3M16 3v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span>History</span>
+    </button>
+    <button data-tab="sgpa" class="mobile-tab-btn">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.6"/><path d="M12 7.5v4.5l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span>SGPA</span>
+    </button>
+    <button data-tab="control" class="mobile-tab-btn">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 13.5a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.04 1.56V19.5a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.04-1.56 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.56-1.04H4.5a2 2 0 110-4h.09a1.7 1.7 0 001.56-1.04 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H10a1.7 1.7 0 001.04-1.56V4.5a2 2 0 114 0v.09a1.7 1.7 0 001.04 1.56 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V10a1.7 1.7 0 001.56 1.04h.09a2 2 0 110 4h-.09a1.7 1.7 0 00-1.56 1.04z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Control</span>
+    </button>
+  </div>
+</nav>
+
+<!-- ============ DAY DETAIL MODAL ============ -->
+<div id="day-modal" class="modal-overlay hidden">
+  <div class="modal-sheet">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold text-white text-base" id="day-modal-title">—</h3>
+      <button id="day-modal-close" class="icon-btn" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="day-modal-body" class="space-y-2.5 max-h-[60vh] overflow-y-auto"></div>
+  </div>
+</div>
+
+<!-- ============ RESET CONFIRM MODAL ============ -->
+<div id="reset-modal" class="modal-overlay hidden">
+  <div class="modal-sheet modal-sheet-narrow text-center">
+    <div class="mx-auto mb-3 w-12 h-12 rounded-full bg-bunk/10 border border-bunk/30 flex items-center justify-center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 9v4M12 17h.01M10.3 3.9L2.7 17a2 2 0 001.7 3h15.2a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="#F43F5E" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h3 class="font-semibold text-white text-base mb-1.5">Reset all data?</h3>
+    <p class="text-sm text-zinc-400 mb-5">This permanently deletes your timetable, attendance history and SGPA records. This cannot be undone.</p>
+    <div class="flex gap-3">
+      <button id="reset-cancel" class="ghost-btn flex-1 justify-center">Cancel</button>
+      <button id="reset-confirm" class="danger-btn flex-1 justify-center">Yes, reset everything</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+  </html>
+
