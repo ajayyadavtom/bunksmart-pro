@@ -13,12 +13,13 @@ const GRADE_ORDER = ["O", "A+", "A", "B+", "B", "C", "P", "F"];
   0. FIREBASE CONFIG — Replace with your actual project keys! 
 */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDltFWlVhPdp5z3sDl45sbmcm_7ruWD5DM",
+  authDomain: "bunksmart-pro.firebaseapp.com",
+  projectId: "bunksmart-pro",
+  storageBucket: "bunksmart-pro.firebasestorage.app",
+  messagingSenderId: "16947399306",
+  appId: "1:16947399306:web:86a588fa46c3fb353cbb73",
+  measurementId: "G-K2SC7SN7RJ"
 };
 
 let fb = null; 
