@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>BunkSmart - Manage your attendance like a pro</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              primary: '#6366F1',
+              secondary: '#8B5CF6',
+              dark: '#121212',
+              cardDark: '#1E1E1E',
+              orange: '#F59E0B',
+              red: '#EF4444',
+              green: '#10B981'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-gray-50 text-gray-900 dark:bg-brand-dark dark:text-gray-100 font-sans flex h-screen overflow-hidden transition-colors duration-200">
+
+  <!-- Sidebar Overlay (Mobile Only) -->
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/60 z-40 hidden opacity-0 transition-opacity duration-300 lg:hidden"></div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-[280px] bg-white dark:bg-brand-cardDark transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:static lg:flex-shrink-0 shadow-2xl lg:shadow-none overflow-y-auto flex flex-col border-r border-gray-100 dark:border-gray-800">
+    <div class="p-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-800">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold text-lg shadow-md">R</div>
+        <div>
+          <h3 class="font-bold text-gray-800 dark:text-gray-100 leading-tight">Rt7</h3>
+          <p class="text-xs text-gray-500 dark:text-gray-400">Guest Mode</p>
+        </div>
+      </div>
+      <button id="sidebar-close" class="p-2 text-gray-500 hover:text-gray-800 dark:hover:text-white lg:hidden">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    
+    <nav class="p-2 space-y-1 flex-1 overflow-y-auto custom-scrollbar">
+      <a href="#" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">⚙️</span> Account Center</a>
+      <a href="#" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">🔐</span> Sign In / Sign Up</a>
+      <a href="#" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">📦</span> Community</a>
+      
+      <div>
+        <button onclick="toggleSubmenu('submenu-file')" class="flex items-center justify-between w-full px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors">
+          <div class="flex items-center gap-4"><span class="text-xl w-6 text-center inline-block">📁</span> File</div>
+          <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div id="submenu-file" class="hidden pl-12 pr-4 py-1 space-y-1">
+          <a href="#" class="block py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Import Data</a>
+          <a href="#" class="block py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Export Data</a>
+        </div>
+      </div>
+
+      <a href="#" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">🔔</span> Notification Settings</a>
+      <a href="#" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">🔑</span> API Settings</a>
+      
+      <div>
+        <button onclick="toggleSubmenu('submenu-view')" class="flex items-center justify-between w-full px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors">
+          <div class="flex items-center gap-4"><span class="text-xl w-6 text-center inline-block">👁️</span> View Options</div>
+          <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div id="submenu-view" class="hidden pl-12 pr-4 py-1 space-y-1">
+          <a href="#" class="block py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Compact View</a>
+        </div>
+      </div>
+
+      <a href="#" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">💡</span> How to Use</a>
+      
+      <div>
+        <button onclick="toggleSubmenu('submenu-legal')" class="flex items-center justify-between w-full px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors">
+          <div class="flex items-center gap-4"><span class="text-xl w-6 text-center inline-block">📋</span> Legal & Info</div>
+          <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div id="submenu-legal" class="hidden pl-12 pr-4 py-1 space-y-1">
+          <a href="#" class="block py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Privacy Policy</a>
+          <a href="#" class="block py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Terms of Service</a>
+        </div>
+      </div>
+
+      <a href="#" class="flex items-center gap-4 px-4 py-3 font-bold text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">☕</span> Buy Me a Coffee</a>
+    </nav>
+    
+    <div class="p-4 border-t border-gray-100 dark:border-gray-800 text-center bg-gray-50/50 dark:bg-gray-900/20">
+      <button class="w-full py-3 rounded-xl font-bold text-white bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 shadow-md flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+        Follow on Instagram
+      </button>
+      <p class="text-xs text-gray-500 mt-3 font-medium">Made by Ajay</p>
+    </div>
+  </aside>
+
+  <!-- Main Content Wrapper -->
+  <div class="flex-1 flex flex-col h-screen overflow-hidden relative bg-gray-50 dark:bg-brand-dark">
+    
+    <!-- Top App Bar -->
+    <header class="flex items-center justify-between px-4 py-3 bg-white dark:bg-brand-cardDark border-b border-gray-100 dark:border-gray-800 shrink-0 z-20">
+      <div class="flex items-center gap-3">
+        <button id="menu-toggle" class="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-sm lg:hidden">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        <div class="text-xl font-bold lg:pl-4">
+          <span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-500">BunkSmart</span>
+        </div>
+      </div>
+      <button id="theme-toggle" class="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-sm">
+        <svg id="theme-icon-light" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        <svg id="theme-icon-dark" class="hidden text-yellow-500" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+    </header>
+
+    <!-- Banner (Configure Period Times shortcut) -->
+    <div class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 dark:from-brand-cardDark dark:to-brand-cardDark border-b border-gray-100 dark:border-gray-800 flex justify-center py-2 shrink-0">
+      <button onclick="openConfigurePeriodsModal()" class="flex items-center gap-2 bg-white/20 dark:bg-indigo-900/40 text-white dark:text-indigo-300 px-5 py-1.5 rounded-full text-sm font-semibold backdrop-blur-sm border border-white/20 dark:border-indigo-800 hover:bg-white/30 transition-colors">
+        <span>⏰</span> Configure Period Times
+      </button>
+    </div>
+
+    <!-- Scrollable Main Canvas -->
+    <main class="flex-1 overflow-y-auto p-4 lg:p-8">
+      
+      <!-- Responsive Grid for Desktop vs Mobile -->
+      <div class="max-w-7xl mx-auto flex flex-col lg:grid lg:grid-cols-12 gap-6 pb-24">
+        
+        <!-- ========================================== -->
+        <!-- 1. UPLOAD SECTION (Mobile: Top, Desktop: Top Left) -->
+        <!-- ========================================== -->
+        <div class="lg:col-span-4 lg:col-start-1 lg:row-start-1 order-1">
+          <div class="border-2 border-dashed border-indigo-200 dark:border-gray-700 rounded-3xl p-6 xl:p-8 text-center bg-white dark:bg-brand-cardDark shadow-sm">
+            <div class="w-16 h-16 xl:w-20 xl:h-20 mx-auto bg-indigo-50 dark:bg-gray-800 rounded-full flex items-center justify-center text-indigo-500 dark:text-gray-400 mb-4 transition-transform hover:scale-105">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </div>
+            <h2 class="text-xl xl:text-2xl font-bold text-gray-800 dark:text-white leading-tight mb-2">Upload Attendance<br>Screenshot(s)</h2>
+            <p class="text-xs xl:text-sm text-gray-500 dark:text-gray-400 mb-6">Drag & drop your file(s) here or click to browse.</p>
+            
+            <div class="space-y-3">
+              <input type="file" id="hidden-file-input" multiple accept="image/*" class="hidden">
+              <button onclick="document.getElementById('hidden-file-input').click()" class="w-full py-3.5 rounded-2xl font-bold text-white bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">Choose Image(s)</button>
+              <button onclick="openManualEntry()" class="w-full py-3.5 rounded-2xl font-bold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Manual Entry</button>
+              <button onclick="openEditClassModal('json')" class="w-full py-3.5 rounded-2xl font-bold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Paste JSON</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 2. CLASSES & TIMETABLE (Mobile: Middle, Desktop: Right side spanning rows) -->
+        <!-- ========================================== -->
+        <div class="lg:col-span-8 lg:col-start-5 lg:row-start-1 lg:row-span-2 order-2">
+          <div class="bg-white dark:bg-brand-cardDark rounded-3xl p-5 sm:p-6 xl:p-8 shadow-sm border border-gray-100 dark:border-gray-800">
+            <h2 class="text-xl md:text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-3 mb-6">
+              <span>📚</span> Select Your Class
+            </h2>
+            
+            <!-- Desktop/Mobile Button Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 xl:gap-4 mb-6">
+              <button onclick="addClass()" class="action-btn bg-brand-primary text-white hover:bg-indigo-600">+ Add Class</button>
+              <button onclick="openEditClassModal('form')" class="action-btn bg-brand-orange text-white hover:bg-amber-600">Edit/Share (Class)</button>
+              <button onclick="deleteClass()" class="action-btn bg-brand-red text-white hover:bg-red-600">Delete Class</button>
+              <button onclick="window.open('https://results.vtu.ac.in', '_blank')" class="action-btn bg-brand-green text-white hover:bg-emerald-600">Student Portal</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+              <!-- Search -->
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <svg class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>
+                </div>
+                <input type="text" class="block w-full pl-12 pr-4 py-4 border border-gray-200 dark:border-gray-700 rounded-2xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 font-medium transition-shadow" placeholder="Search for a class...">
+              </div>
+
+              <!-- Selector -->
+              <div class="relative">
+                <select id="class-selector" class="block w-full pl-5 pr-12 py-4 border-2 border-indigo-100 dark:border-indigo-900/50 rounded-2xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 font-bold appearance-none shadow-sm cursor-pointer transition-all">
+                  <!-- Populated by JS -->
+                </select>
+                <div class="absolute inset-y-0 right-0 flex items-center px-5 pointer-events-none text-indigo-500">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- Weekly Timetable Grid Viewer -->
+            <div class="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-900/50 shadow-sm">
+              <div class="flex items-center justify-between px-4 sm:px-5 py-4 bg-gray-50 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex items-center gap-2">
+                  <span class="text-xl">📅</span>
+                  <h3 class="font-bold text-gray-800 dark:text-white">Weekly Timetable</h3>
+                </div>
+                <button onclick="openConfigurePeriodsModal()" class="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-2 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1"><span>⏰</span> Edit Times</button>
+              </div>
+              
+              <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-sm text-center">
+                  <thead>
+                    <tr id="grid-header">
+                      <!-- Generated by JS -->
+                    </tr>
+                  </thead>
+                  <tbody id="grid-body" class="divide-y divide-gray-100 dark:divide-gray-800">
+                    <!-- Generated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 3. SETTINGS (Mobile: Bottom, Desktop: Bottom Left) -->
+        <!-- ========================================== -->
+        <div class="lg:col-span-4 lg:col-start-1 lg:row-start-2 order-3">
+          <div class="bg-white dark:bg-brand-cardDark rounded-3xl p-6 border border-gray-100 dark:border-gray-800 shadow-sm">
+            <h2 class="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2 text-lg"><span>⚙️</span> Calculation Settings</h2>
+            
+            <div class="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 border border-gray-100 dark:border-gray-700 mb-4">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Target Attendance</span>
+                <span class="font-bold text-lg text-indigo-600 dark:text-indigo-400" id="target-display">75%</span>
+              </div>
+              <input type="range" id="target-slider" min="50" max="100" class="w-full accent-indigo-600 cursor-pointer">
+            </div>
+            
+            <div class="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
+              <p class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Weekends Off</p>
+              <div class="flex flex-col gap-3">
+                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                  <input type="checkbox" id="check-sat" class="w-5 h-5 text-indigo-600 rounded cursor-pointer"> 
+                  <span class="font-medium text-gray-700 dark:text-gray-200">Saturday</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                  <input type="checkbox" id="check-sun" class="w-5 h-5 text-indigo-600 rounded cursor-pointer"> 
+                  <span class="font-medium text-gray-700 dark:text-gray-200">Sunday</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ================= MODALS ================= -->
+
+  <!-- 1. Edit Class Modal -->
+  <div id="edit-class-modal" class="fixed inset-0 z-50 hidden bg-white dark:bg-brand-cardDark sm:bg-black/60 sm:backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white dark:bg-brand-cardDark w-full h-[100dvh] sm:h-[85vh] rounded-none sm:rounded-3xl max-w-4xl flex flex-col sm:shadow-2xl transform translate-y-full sm:translate-y-0 sm:scale-95 transition-transform duration-300">
+      
+      <div class="p-4 sm:p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center shrink-0">
+        <h2 class="font-bold text-xl md:text-2xl dark:text-white flex items-center gap-2">📝 Edit Class Timetable</h2>
+        <button onclick="closeModal('edit-class-modal')" class="p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      
+      <!-- Tabs -->
+      <div class="flex overflow-x-auto border-b border-gray-100 dark:border-gray-800 shrink-0 hide-scrollbar bg-gray-50/50 dark:bg-brand-dark px-2 pt-2">
+        <button onclick="switchEditTab('form')" id="tab-form" class="edit-tab active px-6 py-4 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 whitespace-nowrap transition-colors rounded-t-lg hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10">Form Entry</button>
+        <button onclick="switchEditTab('ai')" id="tab-ai" class="edit-tab px-6 py-4 text-sm font-semibold text-gray-500 border-b-2 border-transparent whitespace-nowrap transition-colors rounded-t-lg hover:bg-gray-100 dark:hover:bg-gray-800">✨ Inbuilt AI Import</button>
+        <button onclick="switchEditTab('json')" id="tab-json" class="edit-tab px-6 py-4 text-sm font-semibold text-gray-500 border-b-2 border-transparent whitespace-nowrap transition-colors rounded-t-lg hover:bg-gray-100 dark:hover:bg-gray-800">Import from JSON</button>
+        <button class="edit-tab px-6 py-4 text-sm font-semibold text-gray-400 border-b-2 border-transparent whitespace-nowrap cursor-not-allowed">Scan QR</button>
+        <button class="edit-tab px-6 py-4 text-sm font-semibold text-gray-400 border-b-2 border-transparent whitespace-nowrap cursor-not-allowed">Share Class</button>
+      </div>
+
+      <!-- Content -->
+      <div class="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50 dark:bg-brand-dark">
+        
+        <!-- Tab: Form Entry (Grid Editor) -->
+        <div id="content-form" class="edit-tab-content flex flex-col h-full">
+          <p class="text-sm md:text-base text-gray-600 dark:text-gray-400 mb-6 font-medium">Assign subjects to each period. Leave as "Free" if no class is scheduled.</p>
+          
+          <div class="flex-1 bg-white dark:bg-brand-cardDark rounded-2xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-sm custom-scrollbar mb-6">
+            <table class="w-full text-center text-sm md:text-base">
+              <thead class="bg-gray-100 dark:bg-gray-800/80 sticky top-0 z-10 shadow-sm">
+                <tr id="edit-grid-header">
+                  <!-- Generated by JS -->
+                </tr>
+              </thead>
+              <tbody id="edit-grid-body" class="divide-y divide-gray-100 dark:divide-gray-800">
+                 <!-- Generated by JS -->
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="shrink-0">
+            <button onclick="openApplyScopeModal()" class="w-full md:w-auto md:px-12 py-4 rounded-xl font-bold text-white bg-brand-green shadow-md hover:bg-emerald-600 transition-colors md:float-right text-lg flex items-center justify-center gap-2">
+              💾 Save Timetable
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab: Import JSON -->
+        <div id="content-json" class="edit-tab-content hidden space-y-6 max-w-2xl mx-auto">
+          <div class="bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-800/50 shadow-sm">
+            <h3 class="font-bold text-indigo-900 dark:text-indigo-300 mb-4 text-lg md:text-xl">How to use AI Import:</h3>
+            <ol class="list-decimal list-inside text-sm md:text-base text-indigo-800 dark:text-indigo-200 space-y-3 font-medium leading-relaxed">
+              <li>Click the button below to copy the AI prompt.</li>
+              <li>Paste it into an AI Chat (like <a href="https://gemini.google.com" target="_blank" class="underline hover:text-indigo-500">Gemini</a>, ChatGPT).</li>
+              <li>Attach your <strong>timetable screenshot</strong> AND your <strong>attendance details screenshot</strong>.</li>
+              <li>The AI will generate a JSON code block. Copy it.</li>
+              <li>Paste the entire JSON code into the text box below and click Save.</li>
+            </ol>
+            <button onclick="copyAiPrompt()" class="mt-6 w-full py-4 rounded-xl font-bold text-indigo-700 bg-white dark:bg-gray-800 dark:text-indigo-300 shadow-sm border border-indigo-200 dark:border-indigo-700 flex justify-center items-center gap-2 hover:bg-indigo-100 dark:hover:bg-gray-700 transition-colors text-lg">
+              <span>📋</span> Copy Prompt for AI
+            </button>
+          </div>
+
+          <div class="space-y-3">
+            <h3 class="font-bold text-gray-800 dark:text-white text-lg">Paste JSON here:</h3>
+            <textarea id="json-input-area" rows="10" class="w-full form-input rounded-2xl bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 p-5 text-sm md:text-base font-mono text-gray-800 dark:text-gray-300 placeholder-gray-400 focus:ring-2 focus:ring-brand-secondary shadow-inner" placeholder='{&#10;  "Your Class Name": {&#10;    "lastDate": "...",&#10;    "holidays": [...],&#10;    "subjects": [...]&#10;  }&#10;}'></textarea>
+          </div>
+          
+          <div class="flex flex-col sm:flex-row gap-4 pt-2">
+             <button onclick="closeModal('edit-class-modal')" class="flex-1 py-4 rounded-xl font-bold text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 transition-colors text-lg">Cancel</button>
+             <button onclick="importJsonData()" class="flex-[2] py-4 rounded-xl font-bold text-white bg-brand-secondary shadow-md hover:bg-purple-600 transition-colors text-lg">🚀 Import JSON</button>
+          </div>
+        </div>
+
+        <!-- Tab: Inbuilt AI Import -->
+        <div id="content-ai" class="edit-tab-content hidden flex flex-col items-center justify-center h-full min-h-[400px] text-center">
+            <div class="w-24 h-24 bg-gradient-to-tr from-purple-500 to-indigo-500 rounded-3xl flex items-center justify-center text-4xl shadow-lg mb-6 text-white rotate-12">✨</div>
+            <h3 class="text-2xl font-bold dark:text-white mb-3">Inbuilt AI Importer</h3>
+            <p class="text-gray-500 dark:text-gray-400 max-w-md text-lg">Pro Feature: Coming soon to automatically scan screenshots on-device without needing to copy-paste!</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Configure Period Times Modal -->
+  <div id="configure-periods-modal" class="fixed inset-0 z-[60] hidden bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white dark:bg-brand-cardDark rounded-t-3xl sm:rounded-3xl w-full max-w-lg flex flex-col shadow-2xl transform translate-y-full sm:translate-y-0 sm:scale-95 transition-transform duration-300 max-h-[90vh]">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+        <h2 class="font-bold text-xl dark:text-white flex items-center gap-2">⏰ Configure Period Times</h2>
+        <button onclick="closeModal('configure-periods-modal')" class="p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto space-y-4" id="period-times-container">
+          <!-- Rendered by JS -->
+      </div>
+      <div class="p-5 border-t border-gray-100 dark:border-gray-800 flex gap-3">
+          <button onclick="addNewPeriodConfig()" class="flex-1 py-3.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-xl font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors">+ Add Period</button>
+          <button onclick="savePeriodTimes()" class="flex-[1.5] py-3.5 bg-brand-primary text-white rounded-xl font-bold shadow-md hover:bg-indigo-600 transition-colors">Save Times</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Apply Timetable Scope Modal -->
+  <div id="apply-scope-modal" class="fixed inset-0 z-[70] hidden bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white dark:bg-brand-cardDark rounded-t-3xl sm:rounded-3xl w-full max-w-md flex flex-col shadow-2xl transform translate-y-full sm:translate-y-0 sm:scale-95 transition-transform duration-300 p-6 sm:p-8 text-center pb-10 sm:pb-8">
+      <div class="w-20 h-20 mx-auto bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-6">
+        <span class="text-4xl">📅</span>
+      </div>
+      <h2 class="font-bold text-2xl text-gray-800 dark:text-white mb-3 leading-tight">When should this<br>timetable apply?</h2>
+      <p class="text-gray-500 dark:text-gray-400 mb-8">Choose when the new timetable should take effect.</p>
+      
+      <div class="text-left space-y-4 mb-8">
+        <label class="flex items-start gap-4 cursor-pointer p-4 rounded-2xl border-2 border-brand-primary bg-indigo-50/50 dark:bg-indigo-900/20 transition-all hover:shadow-md">
+          <input type="radio" name="apply_scope" value="today" checked class="mt-1 w-6 h-6 text-brand-primary focus:ring-brand-primary cursor-pointer">
+          <div>
+            <span class="font-bold text-lg text-gray-800 dark:text-white block mb-1">Apply from today onwards</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">New timetable will be used for today and all future dates. Past logs remain unchanged.</span>
+          </div>
+        </label>
+        
+        <label class="flex items-start gap-4 cursor-not-allowed p-4 rounded-2xl border-2 border-transparent bg-gray-50 dark:bg-gray-800/50 opacity-60">
+          <input type="radio" name="apply_scope" value="custom" disabled class="mt-1 w-6 h-6">
+          <div>
+            <span class="font-bold text-lg text-gray-800 dark:text-white block mb-1">Apply to custom date range</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Pro Feature: Coming soon.</span>
+          </div>
+        </label>
+      </div>
+
+      <div class="flex gap-4">
+        <button onclick="closeModal('apply-scope-modal')" class="flex-1 py-4 rounded-xl font-bold text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-lg">Cancel</button>
+        <button onclick="confirmSaveTimetable()" class="flex-[1.5] py-4 rounded-xl font-bold text-white bg-brand-green shadow-md hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2 text-lg">
+          💾 Confirm & Save
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Manual Roll Call Modal -->
+  <div id="manual-rollcall-modal" class="fixed inset-0 z-50 hidden bg-white dark:bg-brand-cardDark sm:bg-black/60 sm:backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white dark:bg-brand-cardDark w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-3xl max-w-md flex flex-col sm:shadow-2xl transform translate-y-full sm:translate-y-0 sm:scale-95 transition-transform duration-300">
+      <div class="p-4 sm:p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center shrink-0">
+        <h2 class="font-bold text-xl dark:text-white">📝 Daily Attendance</h2>
+        <button onclick="closeModal('manual-rollcall-modal')" class="p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="p-4 sm:p-5 overflow-y-auto flex-1">
+        <div id="rollcall-widget-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Buttons -->
+  <div class="fixed bottom-6 right-6 flex flex-col gap-4 z-30">
+    <button class="w-14 h-14 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-lg hover:scale-110 hover:-translate-y-1 transition-all" aria-label="WhatsApp">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+    </button>
+    <button class="w-14 h-14 rounded-full bg-brand-secondary text-white flex items-center justify-center shadow-lg hover:scale-110 hover:-translate-y-1 transition-all" aria-label="Bot Helper">
+      <span class="text-3xl">🤖</span>
+    </button>
+  </div>
+
+  <div id="toast" class="fixed bottom-10 right-1/2 translate-x-1/2 lg:right-10 lg:translate-x-0 bg-gray-800 dark:bg-white dark:text-gray-900 text-white px-6 py-4 rounded-2xl text-base font-bold shadow-2xl z-[100] opacity-0 pointer-events-none transition-all duration-300 flex items-center gap-3">
+      <span class="text-xl">ℹ️</span> <span id="toast-msg">Notification</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
+
+

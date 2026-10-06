@@ -1,0 +1,16 @@
+{
+  "name": "bunksmart-pro-main",
+  "version": "1.0.0",
+  "description": "VTU Daily Attendance Tracker",
+  "main": "app.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "devDependencies": {
+    "vite": "^8.3.3"
+  }
+}
