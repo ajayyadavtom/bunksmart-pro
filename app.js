@@ -283,48 +283,29 @@
             bodyHTML += `<tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors border-b border-gray-50 dark:border-gray-800/50 last:border-0">
                 <td class="py-3 px-3 font-bold text-gray-800 dark:text-gray-200 bg-white dark:bg-brand-cardDark sticky left-0 z-10 text-sm text-left">${dayShort}</td>`;
             
-            let i = 0;
-            while (i < cls.periodsConfig.length) {
-                const p = cls.periodsConfig[i];
+            cls.periodsConfig.forEach(p => {
                 if (p.type === 'break') {
                     if (rowIndex === 0) {
-                        bodyHTML += `<td rowspan="${daysWithSubjects.length}" class="py-2 px-1 bg-gray-50/50 dark:bg-gray-800/30 text-center font-bold tracking-[0.4em] text-gray-300 dark:text-gray-600 text-xs uppercase rounded-xl border border-gray-100 dark:border-gray-800/50 shadow-inner" style="writing-mode: vertical-rl; transform: rotate(180deg); vertical-align: middle;">${p.label || 'BREAK'}</td>`;
+                        bodyHTML += `<td rowspan="6" class="p-2 border-r border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-center font-bold tracking-[0.2em] text-gray-400 text-xs shadow-inner" style="writing-mode: vertical-rl; transform: rotate(180deg);">${p.label || 'BREAK'}</td>`;
                     }
-                    i++;
                 } else {
-                    const subj = (periods[p.id] || "").trim();
-                    let colspan = 1;
+                    const subj = periods[p.id] || "";
+                    const hasValClass = subj ? 'has-val bg-indigo-50 dark:bg-indigo-900/20' : '';
                     
-                    // Look ahead for identical subjects to merge automatically
-                    if (subj) {
-                        let j = i + 1;
-                        while (j < cls.periodsConfig.length) {
-                            const nextP = cls.periodsConfig[j];
-                            if (nextP.type === 'break') break; // Do not span across breaks
-                            const nextSubj = (periods[nextP.id] || "").trim();
-                            if (nextSubj === subj) {
-                                colspan++;
-                                j++;
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                    
-                    if (subj) {
-                        bodyHTML += `<td colspan="${colspan}" class="py-1.5 px-1.5 align-middle"><div class="mx-auto w-full h-full min-h-[3.5rem] p-2 flex items-center justify-center text-center rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] leading-tight whitespace-normal break-words shadow-[0_2px_10px_-4px_rgba(99,102,241,0.2)] border border-indigo-100/50 dark:border-indigo-800/30 px-4">${subj}</div></td>`;
-                    } else {
-                        bodyHTML += `<td class="py-1.5 px-1.5 text-center align-middle"><span class="text-gray-200 dark:text-gray-700 text-lg font-light">-</span></td>`;
-                    }
-                    
-                    i += colspan;
+                    bodyHTML += `
+                    <td class="p-1 border-r border-gray-100 dark:border-gray-800 last:border-0 min-w-[80px]">
+                        <input type="text" 
+                               value="${subj}" 
+                               placeholder="Free"
+                               onchange="updateGridData('${dayName}', '${p.id}', this.value)"
+                               class="grid-input text-[11px] font-semibold p-2 text-center w-full bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 transition-colors ${hasValClass}">
+                    </td>`;
                 }
-            }
+            });
             bodyHTML += `</tr>`;
         });
-  
         body.innerHTML = bodyHTML;
-  }
+    }
 
   /* --- EDIT CLASS MODAL (GRID FORM ENTRY) --- */
   window.openEditClassModal = (tab = 'form') => {
@@ -370,90 +351,34 @@
             bodyHTML += `<tr>
                 <td class="py-3 px-3 font-bold text-gray-700 dark:text-gray-300 border-r border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-cardDark">${dayShort}</td>`;
             
-            let i = 0;
-            while (i < cls.periodsConfig.length) {
-                const p = cls.periodsConfig[i];
+                        cls.periodsConfig.forEach(p => {
                 if (p.type === 'break') {
                     if (rowIndex === 0) {
                         bodyHTML += `<td rowspan="6" class="p-2 border-r border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-center font-bold tracking-[0.2em] text-gray-400 text-xs shadow-inner" style="writing-mode: vertical-rl; transform: rotate(180deg);">${p.label || 'BREAK'}</td>`;
                     }
-                    i++;
                 } else {
-                    const subj = (periods[p.id] || "").trim();
-                    let colspan = 1;
-                    
-                    if (subj) {
-                        let j = i + 1;
-                        while (j < cls.periodsConfig.length) {
-                            const nextP = cls.periodsConfig[j];
-                            if (nextP.type === 'break') break;
-                            const nextSubj = (periods[nextP.id] || "").trim();
-                            if (nextSubj === subj) {
-                                colspan++;
-                                j++;
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                    
+                    const subj = periods[p.id] || "";
                     const hasValClass = subj ? 'has-val' : '';
                     
-                    let buttonsHTML = '';
-                    if (colspan > 1) {
-                        buttonsHTML = `<button onclick="splitPeriod('${dayName}', ${i}, ${colspan})" class="absolute right-1 top-1 bottom-1 px-1.5 bg-rose-500 text-white font-bold rounded shadow-md text-[9px] active:bg-rose-600 transition-colors flex items-center justify-center z-10" aria-label="Split">Split</button>`;
-                    } else if (i + 1 < cls.periodsConfig.length && cls.periodsConfig[i+1].type !== 'break') {
-                        buttonsHTML = `<button onclick="extendPeriod('${dayName}', ${i})" class="absolute -right-2 top-1 bottom-1 px-1 bg-indigo-500 text-white rounded-full shadow-md z-20 active:bg-indigo-600 transition-transform active:scale-95 flex items-center justify-center text-[10px]" title="Combine with next period">➕</button>`;
-                    }
-
                     bodyHTML += `
-                    <td colspan="${colspan}" class="p-2 border-r border-gray-100 dark:border-gray-800 last:border-0 relative min-w-[80px]">
+                    <td class="p-1 border-r border-gray-100 dark:border-gray-800 last:border-0">
                         <input type="text" 
                                value="${subj}" 
                                placeholder="Free"
-                               onchange="updateGridDataMultiple('${dayName}', ${i}, ${colspan}, this.value)"
-                               class="grid-input text-xs font-semibold p-2 text-center w-full bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 transition-colors ${hasValClass} ${colspan > 1 ? 'font-black tracking-wide bg-indigo-50 dark:bg-indigo-900/20' : ''}">
-                        ${buttonsHTML}
+                               onchange="updateGridData('${dayName}', '${p.id}', this.value)"
+                               class="grid-input text-[11px] font-medium p-2 text-center w-full bg-transparent border border-gray-200 dark:border-gray-700 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${hasValClass}">
                     </td>`;
-                    
-                    i += colspan;
                 }
-            }
+            });
             bodyHTML += `</tr>`;
         });
         body.innerHTML = bodyHTML;
     }
 
-  window.extendPeriod = (dayName, startIndex) => {
-      const cls = getActiveClass();
-      const p = cls.periodsConfig[startIndex];
-      const nextP = cls.periodsConfig[startIndex + 1];
-      if (!cls.timetable[dayName]) cls.timetable[dayName] = {};
-      const subj = cls.timetable[dayName][p.id] || "Class";
-      cls.timetable[dayName][p.id] = subj;
-      cls.timetable[dayName][nextP.id] = subj;
-      saveState(state);
-      renderEditGrid();
-  };
-
-  window.splitPeriod = (dayName, startIndex, colspan) => {
-      const cls = getActiveClass();
-      for (let j = 1; j < colspan; j++) {
-          const nextP = cls.periodsConfig[startIndex + j];
-          cls.timetable[dayName][nextP.id] = "";
-      }
-      saveState(state);
-      renderEditGrid();
-  };
-
-  window.updateGridDataMultiple = (dayName, startIndex, colspan, value) => {
+  window.updateGridData = (dayName, periodId, value) => {
       const cls = getActiveClass();
       if (!cls.timetable[dayName]) cls.timetable[dayName] = {};
-      for (let j = 0; j < colspan; j++) {
-          const p = cls.periodsConfig[startIndex + j];
-          cls.timetable[dayName][p.id] = value.trim();
-      }
-      saveState(state);
+      cls.timetable[dayName][periodId] = value.trim();
       renderEditGrid(); 
   };
 
@@ -633,6 +558,7 @@
 
   /* --- MANUAL ROLL CALL (ATTENDANCE) --- */
   window.openManualEntry = () => {
+      activeRollCallDate = isoDate(new Date());
       renderRollCallWidget();
       openModal('manual-rollcall-modal');
   };
@@ -669,7 +595,7 @@
 
   window.toggleDayHoliday = () => {
     const cls = getActiveClass();
-    const dateKey = isoDate(new Date());
+    const dateKey = activeRollCallDate;
     cls.dailyMarks[dateKey] = cls.dailyMarks[dateKey] || {};
     
     if (!cls.dailyMarks[dateKey].isHoliday) {
@@ -693,12 +619,17 @@
     renderRollCallWidget();
   };
 
-  function renderRollCallWidget() {
+  let activeRollCallDate = isoDate(new Date());
+
+function renderRollCallWidget(targetDateStr) {
+    if (targetDateStr) activeRollCallDate = targetDateStr;
+    const targetDateObj = new Date(activeRollCallDate);
+
     const cls = getActiveClass();
     const host = getEl("rollcall-widget-content");
-    const dayIndex = new Date().getDay();
+    const dayIndex = targetDateObj.getDay();
     const dayName = DAY_NAMES[dayIndex];
-    const dateKey = isoDate(new Date());
+    const dateKey = activeRollCallDate;
 
     if (cls.settings.holidays.includes(dayIndex)) {
       host.innerHTML = `<div class="text-center p-6"><div class="text-5xl mb-3">🎉</div><h3 class="text-xl font-bold dark:text-white">Weekly Holiday</h3><p class="text-gray-500 mt-2">Enjoy your day off!</p></div>`;
@@ -734,7 +665,7 @@
     let html = `
       <div class="flex justify-between items-center mb-6 pb-4 border-b border-gray-100 dark:border-gray-800">
         <div>
-            <h3 class="font-bold text-lg text-gray-800 dark:text-gray-200">${new Date().toLocaleDateString('en-US', {weekday: 'long', month: 'short', day: 'numeric'})}</h3>
+            <h3 class="font-bold text-lg text-gray-800 dark:text-gray-200">${targetDateObj.toLocaleDateString('en-US', {weekday: 'long', month: 'short', day: 'numeric'})}</h3>
         </div>
         <button onclick="toggleDayHoliday()" class="text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-900/30 border border-rose-100 dark:border-rose-900 px-4 py-2 rounded-xl hover:bg-rose-100 transition-colors">Mark Holiday</button>
       </div>
@@ -902,7 +833,7 @@
       });
       
       if (totalAttended === 0 && totalBunked === 0) {
-          details.innerHTML = `<div class="text-center p-6 text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 mt-2">No attendance records found for this day.</div>`;
+          details.innerHTML = `<div class="text-center p-6 text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 mt-2 mb-4">No attendance records found for this day.</div><button onclick="editPastAttendance('${dateStr}')" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-colors">Add Attendance for this Day</button>`;
           return;
       }
       
@@ -917,6 +848,7 @@
                 <div class="text-[10px] font-bold text-rose-600 dark:text-rose-500 uppercase tracking-widest mt-1">Bunked</div>
             </div>
         </div>
+        <button onclick="editPastAttendance('${dateStr}')" class="w-full mt-2 mb-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> Edit this Day's Attendance</button>
         <div class="space-y-2">
             ${attendedHTML ? `<h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Attended Classes</h4>${attendedHTML}` : ''}
             ${bunkedHTML ? `<h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Bunked Classes</h4>${bunkedHTML}` : ''}
@@ -924,6 +856,12 @@
       `;
   };
 
+  
+  window.editPastAttendance = (dateStr) => {
+      closeModal('calendar-modal');
+      renderRollCallWidget(dateStr);
+      openModal('manual-rollcall-modal');
+  };
   /* --- INIT --- */
   function init() {
     initTheme();
