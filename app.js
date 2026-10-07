@@ -283,20 +283,43 @@
             bodyHTML += `<tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors border-b border-gray-50 dark:border-gray-800/50 last:border-0">
                 <td class="py-3 px-3 font-bold text-gray-800 dark:text-gray-200 bg-white dark:bg-brand-cardDark sticky left-0 z-10 text-sm text-left">${dayShort}</td>`;
             
-            cls.periodsConfig.forEach(p => {
+            let i = 0;
+            while (i < cls.periodsConfig.length) {
+                const p = cls.periodsConfig[i];
                 if (p.type === 'break') {
                     if (rowIndex === 0) {
-                        bodyHTML += `<td rowspan="${daysWithSubjects.length}" class="py-2 px-1 bg-gray-50/50 dark:bg-gray-800/30 text-center font-bold tracking-[0.4em] text-gray-300 dark:text-gray-600 text-xs uppercase rounded-xl" style="writing-mode: vertical-rl; transform: rotate(180deg); vertical-align: middle;">${p.label || 'BREAK'}</td>`;
+                        bodyHTML += `<td rowspan="${daysWithSubjects.length}" class="py-2 px-1 bg-gray-50/50 dark:bg-gray-800/30 text-center font-bold tracking-[0.4em] text-gray-300 dark:text-gray-600 text-xs uppercase rounded-xl border border-gray-100 dark:border-gray-800/50 shadow-inner" style="writing-mode: vertical-rl; transform: rotate(180deg); vertical-align: middle;">${p.label || 'BREAK'}</td>`;
                     }
+                    i++;
                 } else {
-                    const subj = periods[p.id] || "";
+                    const subj = (periods[p.id] || "").trim();
+                    let colspan = 1;
+                    
+                    // Look ahead for identical subjects to merge automatically
                     if (subj) {
-                        bodyHTML += `<td class="py-1.5 px-1.5 align-middle"><div class="mx-auto w-full h-full min-h-[3.5rem] p-2 flex items-center justify-center text-center rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] leading-tight whitespace-normal break-words shadow-[0_2px_10px_-4px_rgba(99,102,241,0.2)] border border-indigo-100/50 dark:border-indigo-800/30">${subj}</div></td>`;
+                        let j = i + 1;
+                        while (j < cls.periodsConfig.length) {
+                            const nextP = cls.periodsConfig[j];
+                            if (nextP.type === 'break') break; // Do not span across breaks
+                            const nextSubj = (periods[nextP.id] || "").trim();
+                            if (nextSubj === subj) {
+                                colspan++;
+                                j++;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (subj) {
+                        bodyHTML += `<td colspan="${colspan}" class="py-1.5 px-1.5 align-middle"><div class="mx-auto w-full h-full min-h-[3.5rem] p-2 flex items-center justify-center text-center rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] leading-tight whitespace-normal break-words shadow-[0_2px_10px_-4px_rgba(99,102,241,0.2)] border border-indigo-100/50 dark:border-indigo-800/30 px-4">${subj}</div></td>`;
                     } else {
                         bodyHTML += `<td class="py-1.5 px-1.5 text-center align-middle"><span class="text-gray-200 dark:text-gray-700 text-lg font-light">-</span></td>`;
                     }
+                    
+                    i += colspan;
                 }
-            });
+            }
             bodyHTML += `</tr>`;
         });
   
@@ -347,34 +370,90 @@
             bodyHTML += `<tr>
                 <td class="py-3 px-3 font-bold text-gray-700 dark:text-gray-300 border-r border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-cardDark">${dayShort}</td>`;
             
-            cls.periodsConfig.forEach(p => {
+            let i = 0;
+            while (i < cls.periodsConfig.length) {
+                const p = cls.periodsConfig[i];
                 if (p.type === 'break') {
                     if (rowIndex === 0) {
                         bodyHTML += `<td rowspan="6" class="p-2 border-r border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-center font-bold tracking-[0.2em] text-gray-400 text-xs shadow-inner" style="writing-mode: vertical-rl; transform: rotate(180deg);">${p.label || 'BREAK'}</td>`;
                     }
+                    i++;
                 } else {
-                    const subj = periods[p.id] || "";
+                    const subj = (periods[p.id] || "").trim();
+                    let colspan = 1;
+                    
+                    if (subj) {
+                        let j = i + 1;
+                        while (j < cls.periodsConfig.length) {
+                            const nextP = cls.periodsConfig[j];
+                            if (nextP.type === 'break') break;
+                            const nextSubj = (periods[nextP.id] || "").trim();
+                            if (nextSubj === subj) {
+                                colspan++;
+                                j++;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    
                     const hasValClass = subj ? 'has-val' : '';
                     
+                    let buttonsHTML = '';
+                    if (colspan > 1) {
+                        buttonsHTML = `<button onclick="splitPeriod('${dayName}', ${i}, ${colspan})" class="absolute right-1 top-1 bottom-1 px-1.5 bg-rose-500 text-white font-bold rounded shadow-md text-[9px] active:bg-rose-600 transition-colors flex items-center justify-center z-10" aria-label="Split">Split</button>`;
+                    } else if (i + 1 < cls.periodsConfig.length && cls.periodsConfig[i+1].type !== 'break') {
+                        buttonsHTML = `<button onclick="extendPeriod('${dayName}', ${i})" class="absolute -right-2 top-1 bottom-1 px-1 bg-indigo-500 text-white rounded-full shadow-md z-20 active:bg-indigo-600 transition-transform active:scale-95 flex items-center justify-center text-[10px]" title="Combine with next period">➕</button>`;
+                    }
+
                     bodyHTML += `
-                    <td class="p-1 border-r border-gray-100 dark:border-gray-800 last:border-0">
+                    <td colspan="${colspan}" class="p-2 border-r border-gray-100 dark:border-gray-800 last:border-0 relative min-w-[80px]">
                         <input type="text" 
                                value="${subj}" 
                                placeholder="Free"
-                               onchange="updateGridData('${dayName}', '${p.id}', this.value)"
-                               class="grid-input text-[10px] p-2 text-center w-full bg-transparent border border-transparent rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${hasValClass}">
+                               onchange="updateGridDataMultiple('${dayName}', ${i}, ${colspan}, this.value)"
+                               class="grid-input text-xs font-semibold p-2 text-center w-full bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 transition-colors ${hasValClass} ${colspan > 1 ? 'font-black tracking-wide bg-indigo-50 dark:bg-indigo-900/20' : ''}">
+                        ${buttonsHTML}
                     </td>`;
+                    
+                    i += colspan;
                 }
-            });
+            }
             bodyHTML += `</tr>`;
         });
         body.innerHTML = bodyHTML;
     }
 
-  window.updateGridData = (dayName, periodId, value) => {
+  window.extendPeriod = (dayName, startIndex) => {
+      const cls = getActiveClass();
+      const p = cls.periodsConfig[startIndex];
+      const nextP = cls.periodsConfig[startIndex + 1];
+      if (!cls.timetable[dayName]) cls.timetable[dayName] = {};
+      const subj = cls.timetable[dayName][p.id] || "Class";
+      cls.timetable[dayName][p.id] = subj;
+      cls.timetable[dayName][nextP.id] = subj;
+      saveState(state);
+      renderEditGrid();
+  };
+
+  window.splitPeriod = (dayName, startIndex, colspan) => {
+      const cls = getActiveClass();
+      for (let j = 1; j < colspan; j++) {
+          const nextP = cls.periodsConfig[startIndex + j];
+          cls.timetable[dayName][nextP.id] = "";
+      }
+      saveState(state);
+      renderEditGrid();
+  };
+
+  window.updateGridDataMultiple = (dayName, startIndex, colspan, value) => {
       const cls = getActiveClass();
       if (!cls.timetable[dayName]) cls.timetable[dayName] = {};
-      cls.timetable[dayName][periodId] = value.trim();
+      for (let j = 0; j < colspan; j++) {
+          const p = cls.periodsConfig[startIndex + j];
+          cls.timetable[dayName][p.id] = value.trim();
+      }
+      saveState(state);
       renderEditGrid(); 
   };
 
@@ -696,6 +775,154 @@
     host.innerHTML = html;
   }
 
+
+  
+  /* --- CALENDAR HISTORY --- */
+  let currentCalendarDate = new Date();
+  
+  window.openCalendarModal = () => {
+      renderCalendar();
+      openModal('calendar-modal');
+      closeSidebar();
+  };
+
+  window.changeCalendarMonth = (offset) => {
+      currentCalendarDate.setMonth(currentCalendarDate.getMonth() + offset);
+      renderCalendar();
+  };
+
+  function renderCalendar() {
+      const year = currentCalendarDate.getFullYear();
+      const month = currentCalendarDate.getMonth();
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const displayEl = getEl('calendar-month-display');
+      if (displayEl) displayEl.textContent = `${monthNames[month]} ${year}`;
+      
+      const grid = getEl('calendar-grid');
+      if (!grid) return;
+      
+      let html = '';
+      const cls = getActiveClass();
+      
+      for (let i = 0; i < firstDay; i++) {
+          html += `<div class="aspect-square bg-transparent"></div>`;
+      }
+      
+      const today = new Date();
+      for (let d = 1; d <= daysInMonth; d++) {
+          const dateObj = new Date(year, month, d);
+          
+          // Note: isoDate returns YYYY-MM-DD in local time if we adjust for timezone offset
+          const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+          const localISOTime = (new Date(dateObj - tzoffset)).toISOString().slice(0, -1);
+          const dateStr = localISOTime.split('T')[0];
+          
+          const marks = cls.dailyMarks[dateStr] || {};
+          let attended = 0;
+          let bunked = 0;
+          
+          if (!marks.isHoliday) {
+              Object.keys(marks).forEach(k => {
+                  if (k !== 'isHoliday') {
+                      if (marks[k] === 'attended') attended++;
+                      if (marks[k] === 'bunked') bunked++;
+                  }
+              });
+          }
+          
+          const isToday = (d === today.getDate() && month === today.getMonth() && year === today.getFullYear());
+          const isHoliday = marks.isHoliday;
+          
+          let indicatorHtml = '';
+          let bgClass = "bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600";
+          
+          if (isHoliday) {
+              bgClass = "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800";
+              indicatorHtml = `<div class="text-[8px] font-bold text-orange-400 uppercase mt-0.5">Holiday</div>`;
+          } else if (attended > 0 || bunked > 0) {
+              bgClass = "bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-800";
+              indicatorHtml = `
+                <div class="flex gap-1 justify-center mt-1">
+                  ${attended > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm"></span>` : ''}
+                  ${bunked > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-sm"></span>` : ''}
+                </div>
+              `;
+          }
+          
+          if (isToday) {
+              bgClass += " ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-gray-900";
+          }
+          
+          html += `
+          <div onclick="selectCalendarDate('${dateStr}')" class="aspect-square flex flex-col items-center justify-center rounded-xl border cursor-pointer transition-all ${bgClass}">
+              <span class="text-sm font-bold ${isHoliday ? 'text-orange-500' : 'text-gray-700 dark:text-gray-200'}">${d}</span>
+              ${indicatorHtml}
+          </div>
+          `;
+      }
+      grid.innerHTML = html;
+  }
+
+  window.selectCalendarDate = (dateStr) => {
+      const cls = getActiveClass();
+      const marks = cls.dailyMarks[dateStr] || {};
+      const displayTitle = getEl('cal-selected-date');
+      const details = getEl('cal-details-content');
+      
+      const parts = dateStr.split('-');
+      const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+      displayTitle.textContent = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      
+      if (marks.isHoliday) {
+          details.innerHTML = `<div class="p-6 text-center bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-100 dark:border-orange-800"><span class="text-4xl mb-3 block">???</span><h4 class="font-bold text-orange-700 dark:text-orange-400">Marked as Holiday</h4></div>`;
+          return;
+      }
+      
+      let attendedHTML = '';
+      let bunkedHTML = '';
+      let totalAttended = 0;
+      let totalBunked = 0;
+      
+      Object.keys(marks).forEach(k => {
+          if (k !== 'isHoliday') {
+              const subj = k.split('#').slice(1).join('#');
+              const status = marks[k];
+              if (status === 'attended') {
+                  totalAttended++;
+                  attendedHTML += `<div class="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-emerald-100 dark:border-emerald-800"><span class="truncate pr-2">${subj}</span> <span class="shrink-0 bg-emerald-100 dark:bg-emerald-800/50 px-2 py-1 rounded-md text-xs border border-emerald-200 dark:border-emerald-700">Attended</span></div>`;
+              }
+              if (status === 'bunked') {
+                  totalBunked++;
+                  bunkedHTML += `<div class="p-3 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-rose-100 dark:border-rose-800"><span class="truncate pr-2">${subj}</span> <span class="shrink-0 bg-rose-100 dark:bg-rose-800/50 px-2 py-1 rounded-md text-xs border border-rose-200 dark:border-rose-700">Bunked</span></div>`;
+              }
+          }
+      });
+      
+      if (totalAttended === 0 && totalBunked === 0) {
+          details.innerHTML = `<div class="text-center p-6 text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 mt-2">No attendance records found for this day.</div>`;
+          return;
+      }
+      
+      details.innerHTML = `
+        <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="p-4 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl text-center border border-emerald-200 dark:border-emerald-800 shadow-sm">
+                <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400">${totalAttended}</div>
+                <div class="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-widest mt-1">Attended</div>
+            </div>
+            <div class="p-4 bg-rose-100 dark:bg-rose-900/30 rounded-xl text-center border border-rose-200 dark:border-rose-800 shadow-sm">
+                <div class="text-2xl font-black text-rose-600 dark:text-rose-400">${totalBunked}</div>
+                <div class="text-[10px] font-bold text-rose-600 dark:text-rose-500 uppercase tracking-widest mt-1">Bunked</div>
+            </div>
+        </div>
+        <div class="space-y-2">
+            ${attendedHTML ? `<h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Attended Classes</h4>${attendedHTML}` : ''}
+            ${bunkedHTML ? `<h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Bunked Classes</h4>${bunkedHTML}` : ''}
+        </div>
+      `;
+  };
 
   /* --- INIT --- */
   function init() {
