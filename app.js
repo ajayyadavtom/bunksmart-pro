@@ -900,6 +900,14 @@ function renderRollCallWidget(targetDateStr) {
   }
 
   document.addEventListener('DOMContentLoaded', init);
+
+  window.resetCurrentClass = () => {
+      if(confirm("Are you sure you want to completely erase everything and reset to default?")) {
+          localStorage.removeItem('bunksmart_state');
+          window.location.reload();
+      }
+  };
+
 })();
 
 
