@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "npx serve ."
+  },
+  "dependencies": {
+    "jsdom": "^30.1.2"
   }
 }

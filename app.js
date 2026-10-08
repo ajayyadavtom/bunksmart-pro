@@ -1,3 +1,6 @@
+window.onerror = function(msg, url, line, col, error) {
+   alert("JS Error: " + msg + "\nLine: " + line);
+};
 (function () {
   "use strict";
 
@@ -257,7 +260,7 @@
   
         let daysWithSubjects = DAY_NAMES.filter(day => {
             const periods = cls.timetable[day] || {};
-            return Object.values(periods).some(v => v && v.trim() !== "");
+            return Object.values(periods).some(v => v && typeof v === "string" && v.trim() !== "");
         });
         
         if (daysWithSubjects.length === 0) {
@@ -710,10 +713,10 @@ function renderRollCallWidget(targetDateStr) {
           </div>
           <input type="text" id="rc-sub-${periodId}" class="w-full form-input rounded-xl bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-600 px-4 py-3 text-base font-bold text-gray-800 dark:text-white mb-5 shadow-inner" value="${currentSubject}">
                     <div class="grid grid-cols-2 gap-3">
-            $"{btn('attended', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50', 'Attended')}
-            $"{btn('bunked', 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50', 'Bunked')}
-            $"{btn('holiday', 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600', 'Cancelled')}
-            $"{btn('changed', 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50', 'Subj / Teacher Changed')}
+            ${btn('attended', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50', 'Attended')}
+            ${btn('bunked', 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50', 'Bunked')}
+            ${btn('holiday', 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600', 'Cancelled')}
+            ${btn('changed', 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50', 'Subj / Teacher Changed')}
           </div>
         </div>
       `;
@@ -841,16 +844,16 @@ function renderRollCallWidget(targetDateStr) {
                 const status = marks[k];
                 if (status === 'attended') {
                     totalAttended++;
-                    attendedHTML += <div class="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-emerald-100 dark:border-emerald-800"><span class="truncate pr-2"> + subj + </span> <span class="shrink-0 bg-emerald-100 dark:bg-emerald-800/50 px-2 py-1 rounded-md text-xs border border-emerald-200 dark:border-emerald-700">Attended</span></div>;
+                    attendedHTML += `<div class="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-emerald-100 dark:border-emerald-800"><span class="truncate pr-2">${subj}</span> <span class="shrink-0 bg-emerald-100 dark:bg-emerald-800/50 px-2 py-1 rounded-md text-xs border border-emerald-200 dark:border-emerald-700">Attended</span></div>`;
                 } else if (status === 'bunked') {
                     totalBunked++;
-                    bunkedHTML += <div class="p-3 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-rose-100 dark:border-rose-800"><span class="truncate pr-2"> + subj + </span> <span class="shrink-0 bg-rose-100 dark:bg-rose-800/50 px-2 py-1 rounded-md text-xs border border-rose-200 dark:border-rose-700">Bunked</span></div>;
+                    bunkedHTML += `<div class="p-3 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-rose-100 dark:border-rose-800"><span class="truncate pr-2">${subj}</span> <span class="shrink-0 bg-rose-100 dark:bg-rose-800/50 px-2 py-1 rounded-md text-xs border border-rose-200 dark:border-rose-700">Bunked</span></div>`;
                 } else if (status === 'holiday') {
                     totalOther++;
-                    otherHTML += <div class="p-3 bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-gray-200 dark:border-gray-700"><span class="truncate pr-2"> + subj + </span> <span class="shrink-0 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded-md text-xs border border-gray-300 dark:border-gray-600">Cancelled</span></div>;
+                    otherHTML += `<div class="p-3 bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-gray-200 dark:border-gray-700"><span class="truncate pr-2">${subj}</span> <span class="shrink-0 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded-md text-xs border border-gray-300 dark:border-gray-600">Cancelled</span></div>`;
                 } else if (status === 'changed') {
                     totalOther++;
-                    otherHTML += <div class="p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-amber-100 dark:border-amber-800"><span class="truncate pr-2"> + subj + </span> <span class="shrink-0 bg-amber-100 dark:bg-amber-800/50 px-2 py-1 rounded-md text-xs border border-amber-200 dark:border-amber-700">Subj Changed</span></div>;
+                    otherHTML += `<div class="p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded-lg text-sm font-bold flex justify-between items-center shadow-sm border border-amber-100 dark:border-amber-800"><span class="truncate pr-2">${subj}</span> <span class="shrink-0 bg-amber-100 dark:bg-amber-800/50 px-2 py-1 rounded-md text-xs border border-amber-200 dark:border-amber-700">Subj Changed</span></div>`;
                 }
             }
         });
@@ -873,9 +876,9 @@ function renderRollCallWidget(targetDateStr) {
         </div>
         <button onclick="editPastAttendance('${dateStr}')" class="w-full mt-2 mb-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> Edit this Day's Attendance</button>
           <div class="space-y-2">
-              ${attendedHTML ? <h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Attended Classes</h4> + attendedHTML : ''}
-              ${bunkedHTML ? <h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Bunked Classes</h4> + bunkedHTML : ''}
-              ${otherHTML ? <h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Other (Neutral)</h4> + otherHTML : ''}
+              ${attendedHTML ? '<h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Attended Classes</h4>' + attendedHTML : ''}
+              ${bunkedHTML ? '<h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Bunked Classes</h4>' + bunkedHTML : ''}
+              ${otherHTML ? '<h4 class="font-bold text-xs text-gray-500 uppercase tracking-wider mb-2 mt-4 ml-1">Other (Neutral)</h4>' + otherHTML : ''}
           </div>
       `;
   };
@@ -898,6 +901,8 @@ function renderRollCallWidget(targetDateStr) {
 
   document.addEventListener('DOMContentLoaded', init);
 })();
+
+
 
 
 

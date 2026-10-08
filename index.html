@@ -51,24 +51,42 @@
     </div>
     
     <nav class="p-2 space-y-1 flex-1 overflow-y-auto custom-scrollbar">
-      <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider mt-2 mb-1">Menu</div>
-      <a href="#" onclick="openCalendarModal(); return false;" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">??</span> Attendance Calendar</a>
-      <a href="#" onclick="openModal('account-modal'); return false;" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">??</span> Student Portal Setup</a>
-      <a href="#" onclick="openEditClassModal('form'); return false;" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">??</span> Edit Timetable</a>
       
-      <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider mt-6 mb-1">About</div>
-      <a href="#" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">??</span> How to Use</a>
-      <a href="#" class="flex items-center gap-4 px-4 py-3 font-bold text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">?</span> Buy Me a Coffee</a>
+      <div class="px-4 py-2 text-sm font-bold text-gray-800 dark:text-gray-200 mt-2 mb-1 flex items-center gap-2">
+         <span class="text-xl w-6 text-center inline-block">≡</span> File ▾
+      </div>
+      <a href="#" onclick="openEditClassModal('json'); return false;" class="block px-12 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors">Import Class (JSON)</a>
+      <a href="#" onclick="alert('Export coming soon!'); return false;" class="block px-12 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors">Export Class (JSON)</a>
+      <a href="#" onclick="alert('Backup coming soon!'); return false;" class="block px-12 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors">Backup All Data</a>
+      <a href="#" onclick="alert('Restore coming soon!'); return false;" class="block px-12 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors">Restore from Backup</a>
+      <a href="#" onclick="resetCurrentClass(); return false;" class="block px-12 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors">Restore Default Class</a>
+
+      <a href="#" onclick="alert('Notification Settings coming soon!'); return false;" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">🔔</span> Notification Settings</a>
+      
+      <a href="#" onclick="alert('API Settings coming soon!'); return false;" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">🔑</span> API Settings</a>
+
+      <div class="px-4 py-2 text-sm font-bold text-gray-800 dark:text-gray-200 mt-2 mb-1 flex items-center gap-2">
+         <span class="text-xl w-6 text-center inline-block">👁️</span> View Options ▾
+      </div>
+      <a href="#" onclick="alert('Card View coming soon!'); return false;" class="flex items-center gap-3 px-8 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors"><span class="text-lg">🗂️</span> Card View</a>
+      <a href="#" onclick="alert('Table View coming soon!'); return false;" class="flex items-center gap-3 px-8 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors"><span class="text-lg">📊</span> Table View</a>
+      <a href="#" onclick="alert('Analytics Graph coming soon!'); return false;" class="flex items-center gap-3 px-8 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium bg-indigo-50 dark:bg-indigo-900/20 rounded-xl transition-colors"><span class="text-lg">📈</span> Analytics Graph</a>
+
+      <a href="#" onclick="alert('How to use coming soon!'); return false;" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">💡</span> How to Use</a>
+      
+      <a href="#" onclick="alert('Legal info coming soon!'); return false;" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">📋</span> Legal & Info ▾</a>
+
+      <a href="#" onclick="alert('Coffee coming soon!'); return false;" class="flex items-center gap-4 px-4 py-3 font-bold text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">☕</span> Buy Me a Coffee</a>
     </nav>
     
     <div class="p-4 border-t border-gray-100 dark:border-gray-800 text-center bg-gray-50/50 dark:bg-gray-900/20">
-      <button class="w-full py-3 rounded-xl font-bold text-white bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 shadow-md flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+      <button onclick="window.open('https://instagram.com/faisalkhan', '_blank')" class="w-full py-3 rounded-xl font-bold text-white bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 shadow-md flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
         Follow on Instagram
       </button>
-      <p class="text-xs text-gray-500 mt-3 font-medium">Made by Ajay</p>
+      <p class="text-xs text-gray-500 mt-3 font-medium">Made by Faisal Khan</p>
     </div>
-  </aside>
+  </aside></aside>
 
   <!-- Main Content Wrapper -->
   <div class="flex-1 flex flex-col h-screen overflow-hidden relative bg-gray-50 dark:bg-brand-dark">
@@ -433,7 +451,7 @@
       <span class="text-xl">ℹ️</span> <span id="toast-msg">Notification</span>
   </div>
 
-  <script src="app.js?v=20"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>
 
