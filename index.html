@@ -68,8 +68,8 @@
       <div class="px-4 py-2 text-sm font-bold text-gray-800 dark:text-gray-200 mt-2 mb-1 flex items-center gap-2">
          <span class="text-xl w-6 text-center inline-block">👁️</span> View Options ▾
       </div>
-      <a href="#" onclick="alert('Card View coming soon!'); return false;" class="flex items-center gap-3 px-8 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors"><span class="text-lg">🗂️</span> Card View</a>
-      <a href="#" onclick="alert('Table View coming soon!'); return false;" class="flex items-center gap-3 px-8 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors"><span class="text-lg">📊</span> Table View</a>
+      <a href="#" onclick="setAnalyticsView('card'); return false;" class="flex items-center gap-3 px-8 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors"><span class="text-lg">🗂️</span> Card View</a>
+      <a href="#" onclick="setAnalyticsView('table'); return false;" class="flex items-center gap-3 px-8 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors"><span class="text-lg">📊</span> Table View</a>
       <a href="#" onclick="openAnalyticsModal(); return false;" class="flex items-center gap-3 px-8 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium bg-indigo-50 dark:bg-indigo-900/20 rounded-xl transition-colors"><span class="text-lg">📈</span> Analytics Graph</a>
 
       <a href="#" onclick="alert('How to use coming soon!'); return false;" class="flex items-center gap-4 px-4 py-3 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-xl transition-colors w-full"><span class="text-xl w-6 text-center inline-block">💡</span> How to Use</a>
@@ -467,9 +467,10 @@
       <span class="text-xl">ℹ️</span> <span id="toast-msg">Notification</span>
   </div>
 
-  <script src="app.js?v=22"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>
+
 
 
 

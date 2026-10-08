@@ -185,7 +185,7 @@ window.onerror = function(msg, url, line, col, error) {
       setTimeout(() => overlay.classList.remove('opacity-0'), 10);
     }
 
-    function closeSidebar() {
+    window.closeSidebar = function() {
       sidebar.classList.add('-translate-x-full');
       overlay.classList.add('opacity-0');
       setTimeout(() => overlay.classList.add('hidden'), 300);
@@ -916,108 +916,146 @@ function renderRollCallWidget(targetDateStr) {
       openModal('analytics-modal');
   };
 
-  function renderAnalytics() {
-      const cls = getActiveClass();
-      const container = getEl('analytics-content');
-      
-      // Calculate Stats
-      const subjStats = {};
-      
-      // Initialize subjStats with all unique subjects from the timetable
-      Object.values(cls.timetable || {}).forEach(day => {
-          Object.values(day).forEach(subj => {
-              const s = subj.trim();
-              if(s && !subjStats[s]) {
-                  subjStats[s] = { attended: 0, bunked: 0, total: 0 };
-              }
-          });
-      });
+      window.setAnalyticsView = (mode) => {
+        const cls = getActiveClass();
+        cls.settings = cls.settings || {};
+        cls.settings.analyticsViewMode = mode;
+        saveState(state);
+        openAnalyticsModal();
+    };
 
-      // Populate from history
-      const historyKeys = Object.keys(cls.attendanceHistory || {});
-      let hasData = false;
+    function renderAnalytics() {
+        const cls = getActiveClass();
+        const container = getEl('analytics-content');
+        
+        // Calculate Stats
+        const subjStats = {};
+        
+        // Initialize subjStats with all unique subjects from the timetable
+        Object.values(cls.timetable || {}).forEach(day => {
+            Object.values(day).forEach(subj => {
+                const s = (typeof subj === 'string' ? subj : '').trim();
+                if(s && !subjStats[s]) {
+                    subjStats[s] = { attended: 0, bunked: 0, total: 0 };
+                }
+            });
+        });
+  
+        // Populate from history
+        const historyKeys = Object.keys(cls.dailyMarks || {});
+        let hasData = false;
+  
+        historyKeys.forEach(dateStr => {
+            const marks = cls.dailyMarks[dateStr];
+            if (marks && !marks.isHoliday) {
+                Object.keys(marks).forEach(k => {
+                    if (k === 'isHoliday') return;
+                    const status = marks[k];
+                    let subj = k.split('#').slice(1).join('#').trim();
+                    if(subj) {
+                        if (!subjStats[subj]) subjStats[subj] = { attended: 0, bunked: 0, total: 0 };
+                        if (status === 'attended') {
+                            subjStats[subj].attended++;
+                            subjStats[subj].total++;
+                            hasData = true;
+                        } else if (status === 'bunked') {
+                            subjStats[subj].bunked++;
+                            subjStats[subj].total++;
+                            hasData = true;
+                        }
+                    }
+                });
+            }
+        });
+  
+        if (!hasData) {
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-12 text-center">
+                    <div class="text-6xl mb-4 opacity-50">dY"S</div>
+                    <h3 class="text-lg font-bold text-gray-700 dark:text-gray-300">No Data Yet</h3>
+                    <p class="text-sm text-gray-500 max-w-xs mt-2">Start tracking your attendance in the Roll Call tab to see your analytics graph here!</p>
+                </div>
+            `;
+            return;
+        }
+  
+        let totalAttended = 0;
+        let totalBunked = 0;
+        
+        const viewMode = (cls.settings && cls.settings.analyticsViewMode) ? cls.settings.analyticsViewMode : 'card';
+        let barsHTML = '';
 
-      historyKeys.forEach(dateStr => {
-          const marks = cls.attendanceHistory[dateStr];
-          Object.keys(marks).forEach(periodId => {
-              const status = marks[periodId].status || marks[periodId];
-              // Try to find the subject from the timetable for that day, or just skip if it was changed
-              const dateObj = new Date(dateStr);
-              const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-              const dayName = dayNames[dateObj.getDay()];
-              
-              let subj = (cls.timetable[dayName] && cls.timetable[dayName][periodId]) ? cls.timetable[dayName][periodId].trim() : "Unknown";
-              
-              if(subj && subj !== "Unknown" && subjStats[subj]) {
-                  if (status === 'attended') {
-                      subjStats[subj].attended++;
-                      subjStats[subj].total++;
-                      hasData = true;
-                  } else if (status === 'bunked') {
-                      subjStats[subj].bunked++;
-                      subjStats[subj].total++;
-                      hasData = true;
-                  }
-              }
-          });
-      });
+        if (viewMode === 'table') {
+            barsHTML += `<div class="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-4"><table class="w-full text-left text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                    <tr>
+                        <th class="px-4 py-3 font-bold">Subject</th>
+                        <th class="px-4 py-3 font-bold text-center">Att</th>
+                        <th class="px-4 py-3 font-bold text-center">Bnk</th>
+                        <th class="px-4 py-3 font-bold text-right">%</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">`;
+        }
+        
+        Object.entries(subjStats).forEach(([subj, data]) => {
+            if(data.total === 0) return;
+            
+            totalAttended += data.attended;
+            totalBunked += data.bunked;
+            
+            const percentage = Math.round((data.attended / data.total) * 100);
+            
+            let colorClass = 'bg-emerald-500';
+            let textColorClass = 'text-emerald-700 dark:text-emerald-400';
+            let bgClass = 'bg-emerald-50 dark:bg-emerald-900/20';
+            let tableTextColor = 'text-emerald-600 dark:text-emerald-400';
+            
+            if(percentage < 75) {
+                colorClass = 'bg-rose-500';
+                textColorClass = 'text-rose-700 dark:text-rose-400';
+                bgClass = 'bg-rose-50 dark:bg-rose-900/20';
+                tableTextColor = 'text-rose-600 dark:text-rose-500';
+            } else if(percentage < 85) {
+                colorClass = 'bg-amber-500';
+                textColorClass = 'text-amber-700 dark:text-amber-400';
+                bgClass = 'bg-amber-50 dark:bg-amber-900/20';
+                tableTextColor = 'text-amber-600 dark:text-amber-500';
+            }
+  
+            if (viewMode === 'table') {
+                barsHTML += `
+                    <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
+                        <td class="px-4 py-3 font-bold text-gray-800 dark:text-gray-200">${subj}</td>
+                        <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">${data.attended}</td>
+                        <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-400">${data.bunked}</td>
+                        <td class="px-4 py-3 text-right font-black ${tableTextColor}">${percentage}%</td>
+                    </tr>
+                `;
+            } else {
+                barsHTML += `
+                    <div class="mb-5 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <div class="flex justify-between items-end mb-2">
+                            <div class="font-bold text-gray-800 dark:text-gray-200 truncate pr-4">${subj}</div>
+                            <div class="font-black text-lg ${textColorClass}">${percentage}%</div>
+                        </div>
+                        <div class="w-full h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex">
+                            <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percentage}%"></div>
+                        </div>
+                        <div class="flex justify-between mt-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            <span>${data.attended} Attended</span>
+                            <span>${data.bunked} Bunked</span>
+                        </div>
+                    </div>
+                `;
+            }
+        });
 
-      if (!hasData) {
-          container.innerHTML = `
-              <div class="flex flex-col items-center justify-center py-12 text-center">
-                  <div class="text-6xl mb-4 opacity-50">📊</div>
-                  <h3 class="text-lg font-bold text-gray-700 dark:text-gray-300">No Data Yet</h3>
-                  <p class="text-sm text-gray-500 max-w-xs mt-2">Start tracking your attendance in the Roll Call tab to see your analytics graph here!</p>
-              </div>
-          `;
-          return;
-      }
-
-      let totalAttended = 0;
-      let totalBunked = 0;
-      
-      let barsHTML = '';
-      
-      Object.entries(subjStats).forEach(([subj, data]) => {
-          if(data.total === 0) return;
-          
-          totalAttended += data.attended;
-          totalBunked += data.bunked;
-          
-          const percentage = Math.round((data.attended / data.total) * 100);
-          
-          let colorClass = 'bg-emerald-500';
-          let textColorClass = 'text-emerald-700 dark:text-emerald-400';
-          let bgClass = 'bg-emerald-50 dark:bg-emerald-900/20';
-          
-          if(percentage < 75) {
-              colorClass = 'bg-rose-500';
-              textColorClass = 'text-rose-700 dark:text-rose-400';
-              bgClass = 'bg-rose-50 dark:bg-rose-900/20';
-          } else if(percentage < 85) {
-              colorClass = 'bg-amber-500';
-              textColorClass = 'text-amber-700 dark:text-amber-400';
-              bgClass = 'bg-amber-50 dark:bg-amber-900/20';
-          }
-
-          barsHTML += `
-              <div class="mb-5 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                  <div class="flex justify-between items-end mb-2">
-                      <div class="font-bold text-gray-800 dark:text-gray-200 truncate pr-4">${subj}</div>
-                      <div class="font-black text-lg ${textColorClass}">${percentage}%</div>
-                  </div>
-                  <div class="w-full h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex">
-                      <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percentage}%"></div>
-                  </div>
-                  <div class="flex justify-between mt-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                      <span>${data.attended} Attended</span>
-                      <span>${data.bunked} Bunked</span>
-                  </div>
-              </div>
-          `;
-      });
-      
-      const overallTotal = totalAttended + totalBunked;
+        if (viewMode === 'table') {
+            barsHTML += `</tbody></table></div>`;
+        }
+        
+        const overallTotal = totalAttended + totalBunked;
       const overallPercentage = overallTotal > 0 ? Math.round((totalAttended / overallTotal) * 100) : 0;
       
       let overallColor = overallPercentage >= 75 ? 'text-emerald-500' : 'text-rose-500';
@@ -1045,6 +1083,8 @@ function renderRollCallWidget(targetDateStr) {
   }
 
 })();
+
+
 
 
 
