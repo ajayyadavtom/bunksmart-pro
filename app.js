@@ -903,12 +903,149 @@ function renderRollCallWidget(targetDateStr) {
 
   window.resetCurrentClass = () => {
       if(confirm("Are you sure you want to completely erase everything and reset to default?")) {
-          localStorage.removeItem('bunksmart_state');
+          localStorage.removeItem('bunksmart_pro_state_v5');
           window.location.reload();
       }
   };
 
+
+  /* --- ANALYTICS GRAPH MODAL --- */
+  window.openAnalyticsModal = () => {
+      renderAnalytics();
+      closeSidebar(); // Ensure sidebar closes on mobile
+      openModal('analytics-modal');
+  };
+
+  function renderAnalytics() {
+      const cls = getActiveClass();
+      const container = getEl('analytics-content');
+      
+      // Calculate Stats
+      const subjStats = {};
+      
+      // Initialize subjStats with all unique subjects from the timetable
+      Object.values(cls.timetable || {}).forEach(day => {
+          Object.values(day).forEach(subj => {
+              const s = subj.trim();
+              if(s && !subjStats[s]) {
+                  subjStats[s] = { attended: 0, bunked: 0, total: 0 };
+              }
+          });
+      });
+
+      // Populate from history
+      const historyKeys = Object.keys(cls.attendanceHistory || {});
+      let hasData = false;
+
+      historyKeys.forEach(dateStr => {
+          const marks = cls.attendanceHistory[dateStr];
+          Object.keys(marks).forEach(periodId => {
+              const status = marks[periodId].status || marks[periodId];
+              // Try to find the subject from the timetable for that day, or just skip if it was changed
+              const dateObj = new Date(dateStr);
+              const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+              const dayName = dayNames[dateObj.getDay()];
+              
+              let subj = (cls.timetable[dayName] && cls.timetable[dayName][periodId]) ? cls.timetable[dayName][periodId].trim() : "Unknown";
+              
+              if(subj && subj !== "Unknown" && subjStats[subj]) {
+                  if (status === 'attended') {
+                      subjStats[subj].attended++;
+                      subjStats[subj].total++;
+                      hasData = true;
+                  } else if (status === 'bunked') {
+                      subjStats[subj].bunked++;
+                      subjStats[subj].total++;
+                      hasData = true;
+                  }
+              }
+          });
+      });
+
+      if (!hasData) {
+          container.innerHTML = `
+              <div class="flex flex-col items-center justify-center py-12 text-center">
+                  <div class="text-6xl mb-4 opacity-50">📊</div>
+                  <h3 class="text-lg font-bold text-gray-700 dark:text-gray-300">No Data Yet</h3>
+                  <p class="text-sm text-gray-500 max-w-xs mt-2">Start tracking your attendance in the Roll Call tab to see your analytics graph here!</p>
+              </div>
+          `;
+          return;
+      }
+
+      let totalAttended = 0;
+      let totalBunked = 0;
+      
+      let barsHTML = '';
+      
+      Object.entries(subjStats).forEach(([subj, data]) => {
+          if(data.total === 0) return;
+          
+          totalAttended += data.attended;
+          totalBunked += data.bunked;
+          
+          const percentage = Math.round((data.attended / data.total) * 100);
+          
+          let colorClass = 'bg-emerald-500';
+          let textColorClass = 'text-emerald-700 dark:text-emerald-400';
+          let bgClass = 'bg-emerald-50 dark:bg-emerald-900/20';
+          
+          if(percentage < 75) {
+              colorClass = 'bg-rose-500';
+              textColorClass = 'text-rose-700 dark:text-rose-400';
+              bgClass = 'bg-rose-50 dark:bg-rose-900/20';
+          } else if(percentage < 85) {
+              colorClass = 'bg-amber-500';
+              textColorClass = 'text-amber-700 dark:text-amber-400';
+              bgClass = 'bg-amber-50 dark:bg-amber-900/20';
+          }
+
+          barsHTML += `
+              <div class="mb-5 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                  <div class="flex justify-between items-end mb-2">
+                      <div class="font-bold text-gray-800 dark:text-gray-200 truncate pr-4">${subj}</div>
+                      <div class="font-black text-lg ${textColorClass}">${percentage}%</div>
+                  </div>
+                  <div class="w-full h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex">
+                      <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percentage}%"></div>
+                  </div>
+                  <div class="flex justify-between mt-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      <span>${data.attended} Attended</span>
+                      <span>${data.bunked} Bunked</span>
+                  </div>
+              </div>
+          `;
+      });
+      
+      const overallTotal = totalAttended + totalBunked;
+      const overallPercentage = overallTotal > 0 ? Math.round((totalAttended / overallTotal) * 100) : 0;
+      
+      let overallColor = overallPercentage >= 75 ? 'text-emerald-500' : 'text-rose-500';
+
+      const summaryHTML = `
+          <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg mb-6 relative overflow-hidden">
+              <div class="absolute top-0 right-0 p-4 opacity-20 text-6xl">📈</div>
+              <h3 class="text-indigo-100 font-medium mb-1">Overall Attendance</h3>
+              <div class="text-4xl font-black mb-4">${overallPercentage}%</div>
+              
+              <div class="flex gap-4">
+                  <div class="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 flex-1 border border-white/20">
+                      <div class="text-[10px] uppercase tracking-wider text-indigo-100 font-bold mb-1">Total Attended</div>
+                      <div class="text-xl font-bold">${totalAttended}</div>
+                  </div>
+                  <div class="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 flex-1 border border-white/20">
+                      <div class="text-[10px] uppercase tracking-wider text-indigo-100 font-bold mb-1">Total Bunked</div>
+                      <div class="text-xl font-bold">${totalBunked}</div>
+                  </div>
+              </div>
+          </div>
+      `;
+
+      container.innerHTML = summaryHTML + `<h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 px-1">Subject Breakdown</h3>` + barsHTML;
+  }
+
 })();
+
 
 
 
