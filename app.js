@@ -675,9 +675,13 @@ function renderRollCallWidget(targetDateStr) {
       return;
     }
     
-    window.handleMarkDirect = (periodId, stat) => {
-      const subj = getEl(`rc-sub-${periodId}`).value;
-      if (subj) markClass(dateKey, periodId, subj, stat);
+    window.handleMarkDirect = (periodIdsStr, stat) => {
+      const pIds = periodIdsStr.split(',');
+      const firstId = pIds[0];
+      const subj = getEl(`rc-sub-${firstId}`).value;
+      if (subj) {
+          pIds.forEach(pId => markClass(dateKey, pId, subj, stat));
+      }
     };
 
     let html = `
@@ -689,17 +693,37 @@ function renderRollCallWidget(targetDateStr) {
       </div>
     `;
 
-    html += validPeriods.map((p) => {
-      const periodId = p.id;
-      const defaultSubject = periodsForToday[periodId];
-      const existingKey = Object.keys(marksToday).find(k => k.startsWith(periodId + "#") && k !== "isHoliday");
-      const currentSubject = existingKey ? existingKey.split('#').slice(1).join('#') : defaultSubject;
-      const chosen = existingKey ? marksToday[existingKey] : null;
-      
-      const timeStr = (p.start && p.end) ? `${p.start} - ${p.end}` : '';
+    const groupedPeriods = [];
+    let currentGroup = null;
 
+    validPeriods.forEach((p) => {
+        const defaultSubject = periodsForToday[p.id];
+        const existingKey = Object.keys(marksToday).find(k => k.startsWith(p.id + "#") && k !== "isHoliday");
+        const currentSubject = existingKey ? existingKey.split('#').slice(1).join('#') : defaultSubject;
+        
+        // Group if subjects match exactly.
+        if (currentGroup && currentGroup.subject === currentSubject && currentGroup.existingKey === existingKey) {
+            currentGroup.periods.push(p);
+        } else {
+            if (currentGroup) groupedPeriods.push(currentGroup);
+            currentGroup = { subject: currentSubject, periods: [p], existingKey: existingKey };
+        }
+    });
+    if (currentGroup) groupedPeriods.push(currentGroup);
+
+    html += groupedPeriods.map((group) => {
+      const periodIds = group.periods.map(p => p.id).join(',');
+      const periodLabels = group.periods.map(p => p.id).join(' + ');
+      
+      const firstP = group.periods[0];
+      const lastP = group.periods[group.periods.length - 1];
+      const timeStr = (firstP.start && lastP.end) ? `${firstP.start} - ${lastP.end}` : '';
+      
+      const currentSubject = group.subject;
+      const chosen = group.existingKey ? marksToday[group.existingKey] : null;
+      
       const btn = (status, clsStr, label) => `
-        <button onclick="handleMarkDirect('${periodId}', '${status}')" 
+        <button onclick="handleMarkDirect('${periodIds}', '${status}')" 
           class="flex-1 py-3 rounded-xl text-sm font-bold transition-all ${clsStr} ${chosen === status ? 'ring-2 ring-offset-2 ring-indigo-500 shadow-md scale-[1.02]' : 'opacity-70 hover:opacity-100 hover:-translate-y-0.5'}">
           ${label}
         </button>
@@ -708,11 +732,11 @@ function renderRollCallWidget(targetDateStr) {
       return `
         <div class="mb-5 p-5 rounded-2xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 shadow-sm">
           <div class="flex justify-between items-center mb-4">
-            <span class="text-sm font-bold px-3 py-1 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 rounded-lg">${periodId}</span>
+            <span class="text-sm font-bold px-3 py-1 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 rounded-lg">${periodLabels}</span>
             <span class="text-xs font-bold text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-700">${timeStr}</span>
           </div>
-          <input type="text" id="rc-sub-${periodId}" class="w-full form-input rounded-xl bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-600 px-4 py-3 text-base font-bold text-gray-800 dark:text-white mb-5 shadow-inner" value="${currentSubject}">
-                    <div class="grid grid-cols-2 gap-3">
+          <input type="text" id="rc-sub-${firstP.id}" class="w-full form-input rounded-xl bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-600 px-4 py-3 text-base font-bold text-gray-800 dark:text-white mb-5 shadow-inner" value="${currentSubject}">
+          <div class="grid grid-cols-2 gap-3">
             ${btn('attended', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50', 'Attended')}
             ${btn('bunked', 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50', 'Bunked')}
             ${btn('holiday', 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600', 'Cancelled')}
