@@ -913,6 +913,114 @@ function renderRollCallWidget(targetDateStr) {
       renderRollCallWidget(dateStr);
       openModal('manual-rollcall-modal');
   };
+  
+  /* --- AI CHATBOT LOGIC --- */
+  let chatWidgetOpen = false;
+
+  window.toggleChatWidget = () => {
+    const widget = getEl('ai-chat-widget');
+    if (!widget) return;
+    
+    if (chatWidgetOpen) {
+      widget.classList.remove('scale-100', 'opacity-100');
+      widget.classList.add('scale-0', 'opacity-0');
+      setTimeout(() => widget.classList.add('hidden'), 300);
+      chatWidgetOpen = false;
+    } else {
+      widget.classList.remove('hidden');
+      setTimeout(() => {
+        widget.classList.remove('scale-0', 'opacity-0');
+        widget.classList.add('scale-100', 'opacity-100');
+        getEl('ai-chat-input').focus();
+      }, 10);
+      chatWidgetOpen = true;
+    }
+  };
+
+  function appendMessage(text, isUser) {
+    const container = getEl('ai-chat-messages');
+    
+    let html = '';
+    if (isUser) {
+      html = `
+        <div class="flex gap-3 justify-end">
+          <div class="bg-indigo-600 p-3 rounded-2xl rounded-tr-sm shadow-sm text-sm text-white max-w-[85%]">${text}</div>
+          <div class="w-8 h-8 rounded-full bg-indigo-200 text-indigo-700 font-bold flex items-center justify-center shrink-0">U</div>
+        </div>
+      `;
+    } else {
+      html = `
+        <div class="flex gap-3">
+          <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0">??</div>
+          <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl rounded-tl-sm shadow-sm border border-gray-100 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300 max-w-[85%]">
+            ${text}
+          </div>
+        </div>
+      `;
+    }
+    
+    container.insertAdjacentHTML('beforeend', html);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function analyzeAttendanceQuery(msg) {
+    const cls = getActiveClass();
+    const lower = msg.toLowerCase();
+    
+    if (lower.includes("how many") && (lower.includes("bunk") || lower.includes("miss"))) {
+       let totalAttended = 0;
+       let totalClasses = 0;
+       Object.values(cls.attendance).forEach(sub => {
+           totalAttended += sub.attended;
+           totalClasses += sub.total;
+       });
+       
+       if (totalClasses === 0) return "You haven't attended any classes yet! Start logging your attendance first.";
+       
+       const target = cls.settings.targetPercentage / 100;
+       // Formula for classes we can bunk: (Attended - (Target * Total)) / Target
+       // Actually a simpler way: Target = Attended / (Total + Bunkable) => Bunkable = (Attended / Target) - Total
+       
+       const currentPct = (totalAttended / totalClasses) * 100;
+       if (currentPct < cls.settings.targetPercentage) {
+           // Need to attend more
+           const needed = Math.ceil((cls.settings.targetPercentage * totalClasses - 100 * totalAttended) / (100 - cls.settings.targetPercentage));
+           return `Your current attendance is ${currentPct.toFixed(1)}%. You are below your ${cls.settings.targetPercentage}% target. You need to attend **${needed}** more consecutive classes before you can safely bunk again!`;
+       } else {
+           const bunkable = Math.floor((totalAttended / target) - totalClasses);
+           return `Your current attendance is ${currentPct.toFixed(1)}%. You can safely bunk **${bunkable}** more classes while staying above ${cls.settings.targetPercentage}%!`;
+       }
+    }
+    
+    if (lower.includes("attendance") || lower.includes("status")) {
+       let totalAttended = 0;
+       let totalClasses = 0;
+       Object.values(cls.attendance).forEach(sub => {
+           totalAttended += sub.attended;
+           totalClasses += sub.total;
+       });
+       if (totalClasses === 0) return "No attendance data recorded yet.";
+       const pct = ((totalAttended / totalClasses) * 100).toFixed(1);
+       return `Overall Attendance: **${pct}%** (${totalAttended}/${totalClasses} classes). Check the Student Portal tab for subject-wise details!`;
+    }
+    
+    return "I am the BunkSmart AI! I can analyze your attendance. Try asking: 'How many classes can I bunk?' or 'What is my attendance?'";
+  }
+
+  window.sendChatMessage = () => {
+    const input = getEl('ai-chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+    
+    appendMessage(msg, true);
+    input.value = '';
+    
+    // Simulate AI thinking
+    setTimeout(() => {
+      const response = analyzeAttendanceQuery(msg);
+      appendMessage(response, false);
+    }, 600);
+  };
   /* --- INIT --- */
   function init() {
     initTheme();
