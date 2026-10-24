@@ -6,7 +6,7 @@ window.onerror = function(msg, url, line, col, error) {
 
   const STORAGE_KEY = "bunksmart_pro_state_v5";
   const THEME_KEY = "bunksmart_theme";
-  const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednnesday", "Thursday", "Friday", "Saturday"];
   const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   /* --- STATE MANAGEMENT --- */
