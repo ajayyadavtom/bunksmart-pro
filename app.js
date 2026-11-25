@@ -440,64 +440,297 @@
     };
   }
 
-  function csvCell(value) {
-    const str = String(value ?? "");
-    return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  function pdfAsciiSafe(value) {
+    return String(value ?? "")
+      .replace(/[•·]/g, "-")
+      .replace(/[—–]/g, "-")
+      .replace(/[✓✔]/g, "Present")
+      .replace(/[✕✖]/g, "Absent")
+      .replace(/[^\x20-\x7E]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
-  function buildMonthlyAttendanceCsv(report) {
-    const lines = [
-      ["Month", "RollNo", "StudentName", "Subject", "Present", "Absent", "Cancelled", "TotalHeld", "Monthly%", "CumulativeAttended", "CumulativeTotal", "Cumulative%"].map(csvCell).join(",")
-    ];
+  function pdfEscapeString(text) {
+    return pdfAsciiSafe(text)
+      .replace(/\\/g, "\\\\")
+      .replace(/\(/g, "\\(")
+      .replace(/\)/g, "\\)");
+  }
 
-    (report.subjects || []).forEach((s) => {
-      lines.push(
-        [
-          report.monthKey,
-          report.rollNo,
-          report.studentName,
-          s.subject,
-          s.present,
-          s.absent,
-          s.cancelled,
-          s.held,
-          s.monthlyPct === null ? "N/A" : `${s.monthlyPct}%`,
-          s.cumulativeAttended,
-          s.cumulativeTotal,
-          s.cumulativePct === null ? "N/A" : `${s.cumulativePct}%`
-        ].map(csvCell).join(",")
+  /**
+   * Builds a multi-page PDF 1.4 document from structured drawing commands.
+   * Uses standard Type1 Helvetica & Helvetica-Bold fonts so it works 100% offline.
+   */
+  function buildPdfDocumentBytes(pagesOps) {
+    const encoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
+    const toBytes = (str) => {
+      if (encoder) return encoder.encode(str);
+      const arr = new Uint8Array(str.length);
+      for (let i = 0; i < str.length; i++) arr[i] = str.charCodeAt(i) & 0xff;
+      return arr;
+    };
+
+    const objects = [];
+    // 1: Catalog, 2: Pages, 3: Helvetica, 4: Helvetica-Bold
+    objects.push("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+    const pageObjIds = [];
+    const firstPageObjId = 5;
+    pagesOps.forEach((_, i) => pageObjIds.push(firstPageObjId + i * 2));
+
+    objects.push(`2 0 obj\n<< /Type /Pages /Kids [${pageObjIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageObjIds.length} >>\nendobj\n`);
+    objects.push("3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+    objects.push("4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n");
+
+    pagesOps.forEach((ops, idx) => {
+      const pageId = firstPageObjId + idx * 2;
+      const contentId = pageId + 1;
+      const streamStr = ops.join("\n");
+      const streamLen = toBytes(streamStr).length;
+
+      objects.push(
+        `${pageId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`
+      );
+      objects.push(
+        `${contentId} 0 obj\n<< /Length ${streamLen} >>\nstream\n${streamStr}\nendstream\nendobj\n`
       );
     });
 
-    lines.push(
-      [
-        report.monthKey,
-        report.rollNo,
-        report.studentName,
-        "OVERALL MONTH",
-        report.overall.present,
-        report.overall.absent,
-        report.overall.cancelled,
-        report.overall.held,
-        report.overall.monthlyPct === null ? "N/A" : `${report.overall.monthlyPct}%`,
-        "",
-        "",
-        ""
-      ].map(csvCell).join(",")
+    const parts = ["%PDF-1.4\n"];
+    let offset = toBytes(parts[0]).length;
+    const offsets = [0];
+
+    objects.forEach((objStr) => {
+      offsets.push(offset);
+      parts.push(objStr);
+      offset += toBytes(objStr).length;
+    });
+
+    const xrefOffset = offset;
+    let xref = `xref\n0 ${offsets.length}\n0000000000 65535 f \n`;
+    for (let i = 1; i < offsets.length; i++) {
+      xref += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+    }
+    const trailer = `trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+    parts.push(xref, trailer);
+
+    return toBytes(parts.join(""));
+  }
+
+  function createPdfLayoutWriter(headerTitle, headerSubtitle) {
+    const pages = [];
+    let ops = [];
+    let y = 795;
+
+    const addHeader = (isContinuation) => {
+      ops.push("0.31 0.27 0.90 rg");
+      ops.push("36 772 523 44 re f");
+      ops.push("1 1 1 rg");
+      ops.push("BT /F2 15 Tf 48 798 Td (" + pdfEscapeString(headerTitle) + ") Tj ET");
+      const sub = isContinuation ? `${headerSubtitle} (Continued)` : headerSubtitle;
+      ops.push("BT /F1 9.5 Tf 48 782 Td (" + pdfEscapeString(sub) + ") Tj ET");
+      ops.push("0.06 0.09 0.16 rg");
+      y = 750;
+    };
+
+    const startNewPage = (isCont = true) => {
+      if (ops.length > 0) pages.push(ops);
+      ops = [];
+      addHeader(isCont);
+    };
+
+    const ensureSpace = (needed = 24) => {
+      if (y - needed < 48) {
+        startNewPage(true);
+      }
+    };
+
+    const text = (x, size, bold, str, rgb = "0.06 0.09 0.16") => {
+      const font = bold ? "/F2" : "/F1";
+      ops.push(`${rgb} rg`);
+      ops.push(`BT ${font} ${size} Tf ${x} ${y} Td (${pdfEscapeString(str)}) Tj ET`);
+    };
+
+    const line = (yPos = y) => {
+      ops.push("0.88 0.91 0.94 RG 0.7 w");
+      ops.push(`36 ${yPos} m 559 ${yPos} l S`);
+    };
+
+    const box = (x, yBottom, w, h, rgb = "0.96 0.97 0.99") => {
+      ops.push(`${rgb} rg`);
+      ops.push(`${x} ${yBottom} ${w} ${h} re f`);
+    };
+
+    startNewPage(false);
+
+    return {
+      ensureSpace,
+      text,
+      line,
+      box,
+      getY: () => y,
+      moveY: (delta) => { y += delta; },
+      finish: () => {
+        if (ops.length > 0) pages.push(ops);
+        return buildPdfDocumentBytes(pages);
+      }
+    };
+  }
+
+  function truncatePdfCol(str, maxLen) {
+    const s = pdfAsciiSafe(str);
+    return s.length > maxLen ? s.slice(0, maxLen - 2) + ".." : s;
+  }
+
+  function buildMonthlyAttendancePdf(report) {
+    const w = createPdfLayoutWriter(
+      "BunkSmart Pro - Monthly Attendance Report",
+      `${report.monthLabel} (${report.monthKey})`
     );
 
-    if (report.dailyRecords && report.dailyRecords.length > 0) {
-      lines.push("");
-      lines.push(["Date", "Day", "Holiday", "ClassesMarked"].map(csvCell).join(","));
+    // Student & summary box
+    w.box(36, w.getY() - 42, 523, 50, "0.95 0.96 0.99");
+    w.text(46, 10.5, true, `Student: ${report.studentName}   |   Roll No: ${report.rollNo}   |   Generated: ${isoDate()}`);
+    w.moveY(-18);
+    const ovPct = report.overall.monthlyPct === null ? "N/A" : `${report.overall.monthlyPct}%`;
+    w.text(
+      46,
+      10,
+      false,
+      `Month Summary -> Present: ${report.overall.present}   |   Absent: ${report.overall.absent}   |   Cancelled: ${report.overall.cancelled}   |   Total Held: ${report.overall.held}   |   Monthly Rate: ${ovPct}`
+    );
+    w.moveY(-36);
+
+    // Subject Breakdown Table
+    w.ensureSpace(50);
+    w.text(36, 12, true, "Subject-Wise Attendance Summary", "0.18 0.22 0.35");
+    w.moveY(-16);
+
+    w.box(36, w.getY() - 6, 523, 20, "0.90 0.92 0.97");
+    w.text(42, 9, true, "Subject");
+    w.text(185, 9, true, "Present");
+    w.text(240, 9, true, "Absent");
+    w.text(292, 9, true, "Held");
+    w.text(342, 9, true, "Month %");
+    w.text(412, 9, true, "Overall (A/T)");
+    w.text(498, 9, true, "Overall %");
+    w.moveY(-20);
+
+    (report.subjects || []).forEach((s) => {
+      w.ensureSpace(20);
+      const mPct = s.monthlyPct === null ? "--" : `${s.monthlyPct}%`;
+      const cPct = s.cumulativePct === null ? "--" : `${s.cumulativePct}%`;
+      w.text(42, 9.5, true, truncatePdfCol(s.subject, 22));
+      w.text(192, 9.5, false, String(s.present), "0.08 0.50 0.24");
+      w.text(246, 9.5, false, String(s.absent), s.absent > 0 ? "0.75 0.07 0.24" : "0.06 0.09 0.16");
+      w.text(298, 9.5, false, String(s.held));
+      w.text(344, 9.5, false, mPct);
+      w.text(418, 9.5, false, `${s.cumulativeAttended}/${s.cumulativeTotal}`);
+      w.text(500, 9.5, true, cPct);
+      w.line(w.getY() - 5);
+      w.moveY(-18);
+    });
+
+    // Daily Logs Section
+    w.moveY(-12);
+    w.ensureSpace(50);
+    w.text(36, 12, true, "Daily Attendance Log (Date-by-Date)", "0.18 0.22 0.35");
+    w.moveY(-16);
+
+    if (!report.dailyRecords || report.dailyRecords.length === 0) {
+      w.text(36, 9.5, false, "No daily roll call entries logged in this month yet.", "0.39 0.45 0.55");
+    } else {
+      w.box(36, w.getY() - 6, 523, 20, "0.90 0.92 0.97");
+      w.text(42, 9, true, "Date");
+      w.text(122, 9, true, "Day");
+      w.text(200, 9, true, "Classes Marked");
+      w.moveY(-20);
+
       report.dailyRecords.forEach((d) => {
+        w.ensureSpace(20);
         const markText = d.isHoliday
           ? "HOLIDAY"
-          : d.entries.map((e) => `${e.slot}:${e.subject}=${e.status}`).join(" | ");
-        lines.push([d.dateKey, d.weekday, d.isHoliday ? "Yes" : "No", markText].map(csvCell).join(","));
+          : d.entries.map((e) => `${e.subject}: ${e.status === "attended" ? "Present" : e.status === "bunked" ? "Absent" : "Cancelled"}`).join(", ");
+        w.text(42, 9, false, d.dateKey);
+        w.text(122, 9, false, d.weekday.slice(0, 3));
+        const hasAbs = d.entries.some((e) => e.status === "bunked");
+        w.text(200, 9, false, truncatePdfCol(markText, 64), hasAbs ? "0.75 0.07 0.24" : "0.06 0.09 0.16");
+        w.line(w.getY() - 5);
+        w.moveY(-17);
       });
     }
 
-    return lines.join("\n");
+    return w.finish();
+  }
+
+  function buildCompleteAttendancePdf(currentState = state, userRecord = getActiveUser()) {
+    const metrics = computeAllMetrics(currentState);
+    const studentName = userRecord?.name || "Student";
+    const rollNo = userRecord?.displayRollNo || "LOCAL";
+    const w = createPdfLayoutWriter(
+      "BunkSmart Pro - Complete Attendance Report",
+      `Student: ${studentName} (${rollNo})`
+    );
+
+    w.box(36, w.getY() - 42, 523, 50, "0.95 0.96 0.99");
+    w.text(46, 10.5, true, `Student: ${studentName}   |   Roll No: ${rollNo}   |   Target: ${metrics.targetPct}%   |   Date: ${isoDate()}`);
+    w.moveY(-18);
+    const ovPct = formatPct(metrics.overall.percentage);
+    w.text(
+      46,
+      10,
+      false,
+      `Overall: ${metrics.overall.attended}/${metrics.overall.total} (${ovPct})   |   Missed: ${metrics.overall.burned}   |   ${metrics.overall.shortText}`
+    );
+    w.moveY(-36);
+
+    w.ensureSpace(50);
+    w.text(36, 12, true, "All Subjects Attendance Summary", "0.18 0.22 0.35");
+    w.moveY(-16);
+
+    w.box(36, w.getY() - 6, 523, 20, "0.90 0.92 0.97");
+    w.text(42, 9, true, "Subject");
+    w.text(185, 9, true, "Attended");
+    w.text(245, 9, true, "Missed");
+    w.text(300, 9, true, "Total");
+    w.text(355, 9, true, "Rate %");
+    w.text(425, 9, true, "Status / Safe Skips");
+    w.moveY(-20);
+
+    metrics.subjects.forEach((s) => {
+      w.ensureSpace(20);
+      w.text(42, 9.5, true, truncatePdfCol(s.subject, 22));
+      w.text(192, 9.5, false, String(s.attended), "0.08 0.50 0.24");
+      w.text(252, 9.5, false, String(s.burned), s.burned > 0 ? "0.75 0.07 0.24" : "0.06 0.09 0.16");
+      w.text(306, 9.5, false, String(s.total));
+      w.text(355, 9.5, true, formatPct(s.percentage));
+      w.text(425, 9, false, truncatePdfCol(s.shortText, 24));
+      w.line(w.getY() - 5);
+      w.moveY(-18);
+    });
+
+    const months = getAvailableMonthKeys(currentState);
+    if (months.length > 0) {
+      w.moveY(-12);
+      w.ensureSpace(50);
+      w.text(36, 12, true, "Monthly Breakdown", "0.18 0.22 0.35");
+      w.moveY(-16);
+      months.forEach((mk) => {
+        w.ensureSpace(20);
+        const rep = buildMonthlyAttendanceReport(currentState, mk, userRecord);
+        const pctText = rep.overall.monthlyPct === null ? "No marks" : `${rep.overall.monthlyPct}%`;
+        w.text(
+          42,
+          9.5,
+          false,
+          `${rep.monthLabel} (${mk}): Present ${rep.overall.present}, Absent ${rep.overall.absent}, Held ${rep.overall.held}, Rate ${pctText}`
+        );
+        w.moveY(-16);
+      });
+    }
+
+    return w.finish();
   }
 
   function buildCompletePhoneDatabasePayload(currentState = state, userRecord = getActiveUser()) {
@@ -641,7 +874,7 @@
       for (const mk of monthsToWrite) {
         const report = dbPayload.monthlyArchives[mk] || buildMonthlyAttendanceReport(currentState, mk, userRecord);
         await writeTextToDirFile(phoneDirectoryHandle, [rootFolder, "monthly"], `${mk}.json`, JSON.stringify(report, null, 2));
-        await writeTextToDirFile(phoneDirectoryHandle, [rootFolder, "monthly"], `${mk}.csv`, buildMonthlyAttendanceCsv(report));
+        await writeTextToDirFile(phoneDirectoryHandle, [rootFolder, "monthly"], `${mk}.pdf`, buildMonthlyAttendancePdf(report));
       }
 
       lastFileSyncAt = new Date().toISOString();
@@ -738,7 +971,7 @@
       const monthKey = changedDateKey.slice(0, 7);
       const report = buildMonthlyAttendanceReport(s, monthKey, activeUser);
       const rollSlug = (activeUser?.rollNo || "student").toLowerCase();
-      downloadTextFile(`bunksmart-${rollSlug}-month-${monthKey}.json`, JSON.stringify(report, null, 2), "application/json");
+      downloadTextFile(`bunksmart-${rollSlug}-month-${monthKey}.pdf`, buildMonthlyAttendancePdf(report), "application/pdf");
     }
   }
 
@@ -3916,7 +4149,7 @@
 
   async function linkPhoneFolderForAutoSave() {
     if (typeof window === "undefined" || typeof window.showDirectoryPicker !== "function") {
-      showToast("Direct folder auto-save is not supported by this browser. Use Save JSON / CSV buttons below.", "info");
+      showToast("Direct folder auto-save is not supported by this browser. Use Save PDF / JSON buttons below.", "info");
       return;
     }
     try {
@@ -3963,8 +4196,8 @@
               <div class="saved-user-meta">${rep.totalDaysMarked} day(s) logged • ${escapeHtml(pctText)}</div>
             </div>
             <div class="monthly-file-actions">
+              <button type="button" class="btn-mini" onclick="downloadMonthFile('${escapeHtml(mk)}', 'pdf')">📄 Month PDF</button>
               <button type="button" class="btn-mini" onclick="downloadMonthFile('${escapeHtml(mk)}', 'json')">⬇ Month JSON</button>
-              <button type="button" class="btn-mini" onclick="downloadMonthFile('${escapeHtml(mk)}', 'csv')">⬇ Month CSV</button>
             </div>
           </div>
         `;
@@ -3993,13 +4226,14 @@
             ? `<button type="button" id="link-phone-folder-btn" class="btn-primary">📁 ${phoneDirectoryHandle ? "Change Linked Phone Folder" : "Link Phone Folder (Auto-Save Files)"}</button>`
             : ""
         }
-        <button type="button" id="download-full-db-btn" class="btn-secondary">💾 Save Complete Database File to Phone</button>
+        <button type="button" id="download-full-pdf-btn" class="btn-primary">📄 Download Full Report (PDF)</button>
+        <button type="button" id="download-full-db-btn" class="btn-secondary">💾 Save Complete Backup (JSON)</button>
         <button type="button" id="switch-user-btn" class="btn-secondary">👤 Switch / Add Student</button>
       </div>
 
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
         <input type="checkbox" id="auto-download-monthly-chk" ${autoDownloadOn ? "checked" : ""}>
-        <span>Also download updated Monthly Attendance file automatically whenever I mark daily roll call</span>
+        <span>Also download updated Monthly Attendance PDF automatically whenever I mark daily roll call</span>
       </label>
 
       <div>
@@ -4010,6 +4244,17 @@
 
     const linkBtn = getEl("link-phone-folder-btn");
     if (linkBtn) linkBtn.onclick = linkPhoneFolderForAutoSave;
+
+    const fullPdfBtn = getEl("download-full-pdf-btn");
+    if (fullPdfBtn) {
+      fullPdfBtn.onclick = () => {
+        const activeUser = getActiveUser();
+        const pdfBytes = buildCompleteAttendancePdf(state, activeUser);
+        const rollSlug = (activeUser?.rollNo || "student").toLowerCase();
+        downloadTextFile(`bunksmart-${rollSlug}-attendance-${isoDate()}.pdf`, pdfBytes, "application/pdf");
+        showToast("Full attendance PDF downloaded!", "success");
+      };
+    }
 
     const fullDbBtn = getEl("download-full-db-btn");
     if (fullDbBtn) {
@@ -4100,16 +4345,25 @@
         }
       };
 
+      window.downloadFullAttendancePdf = function () {
+        const activeUser = getActiveUser();
+        const pdfBytes = buildCompleteAttendancePdf(state, activeUser);
+        const rollSlug = (activeUser?.rollNo || "student").toLowerCase();
+        downloadTextFile(`bunksmart-${rollSlug}-attendance-${isoDate()}.pdf`, pdfBytes, "application/pdf");
+        showToast("Attendance PDF downloaded!", "success");
+      };
+
       window.downloadMonthFile = function (monthKey, format) {
         const activeUser = getActiveUser();
         const report = buildMonthlyAttendanceReport(state, monthKey, activeUser);
         const rollSlug = (activeUser?.rollNo || "student").toLowerCase();
-        if (format === "csv") {
-          downloadTextFile(`bunksmart-${rollSlug}-month-${monthKey}.csv`, buildMonthlyAttendanceCsv(report), "text/csv;charset=utf-8");
-        } else {
+        if (format === "json") {
           downloadTextFile(`bunksmart-${rollSlug}-month-${monthKey}.json`, JSON.stringify(report, null, 2), "application/json");
+          showToast(`Saved ${monthKey} attendance (JSON) to phone files.`, "success");
+        } else {
+          downloadTextFile(`bunksmart-${rollSlug}-month-${monthKey}.pdf`, buildMonthlyAttendancePdf(report), "application/pdf");
+          showToast(`Saved ${monthKey} attendance report (PDF) to phone files.`, "success");
         }
-        showToast(`Saved ${monthKey} attendance (${format.toUpperCase()}) to phone files.`, "success");
       };
     }
   }
@@ -4130,7 +4384,8 @@
     getActiveUser,
     getAvailableMonthKeys,
     buildMonthlyAttendanceReport,
-    buildMonthlyAttendanceCsv,
+    buildMonthlyAttendancePdf,
+    buildCompleteAttendancePdf,
     buildCompletePhoneDatabasePayload
   };
 

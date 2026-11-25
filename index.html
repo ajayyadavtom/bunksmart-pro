@@ -89,7 +89,10 @@
           <h2>Attendance Dashboard</h2>
           <p>See your current attendance percentage and exact safe-skip buffer per subject.</p>
         </div>
-        <button type="button" class="btn-primary" onclick="switchView('rollcall')">+ Mark Today's Classes</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" id="home-export-pdf-btn" class="btn-secondary" onclick="downloadFullAttendancePdf()">📄 Export PDF</button>
+          <button type="button" class="btn-primary" onclick="switchView('rollcall')">+ Mark Today's Classes</button>
+        </div>
       </div>
 
       <div class="grid-2">
