@@ -11,6 +11,9 @@
   let toastTimer = null;
   let selectedRollCallDate = null; // Initialized after local date helper is ready
   let editingSubject = null;
+  let graphSubject = null;
+  let graphSubjectMode = "cumulative"; // "cumulative" | "daily"
+  let graphSelectedIndex = null;
 
   /* --- DOM & STRING HELPERS --- */
   function getEl(id) {
@@ -528,6 +531,30 @@
       const sub = decodeURIComponent(encodedSub);
       if (!state.attendance[sub]) return;
       editingSubject = editingSubject === sub ? null : sub;
+      if (editingSubject) graphSubject = null;
+      renderHome();
+    };
+
+    window.openSubjectGraph = function (encodedSub) {
+      const sub = decodeURIComponent(encodedSub);
+      if (!state.attendance[sub]) return;
+      if (graphSubject === sub) {
+        graphSubject = null;
+      } else {
+        graphSubject = sub;
+        graphSelectedIndex = null;
+        editingSubject = null;
+      }
+      renderHome();
+    };
+
+    window.setSubjectGraphMode = function (mode) {
+      graphSubjectMode = mode === "daily" ? "daily" : "cumulative";
+      renderHome();
+    };
+
+    window.selectSubjectGraphDay = function (idx) {
+      graphSelectedIndex = Number(idx);
       renderHome();
     };
 
@@ -573,6 +600,329 @@
       renderRollCallWidget();
       showToast(`Removed "${sub}".`, "info");
     };
+  }
+
+  /* --- PER-SUBJECT DAY-BY-NUMBER GRAPH --- */
+  function formatShortMonthDay(d) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${months[d.getMonth()]} ${d.getDate()}`;
+  }
+
+  function buildSubjectDaySeries(subject, currentState = state, refDate = new Date()) {
+    const rec = currentState?.attendance?.[subject] || { attended: 0, total: 0 };
+    const dailyMarks = currentState?.dailyMarks || {};
+    const loggedDays = [];
+    let loggedAttended = 0;
+    let loggedBunked = 0;
+
+    Object.keys(dailyMarks)
+      .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
+      .sort()
+      .forEach((dateKey) => {
+        const dayObj = dailyMarks[dateKey];
+        if (!dayObj || dayObj.isHoliday) return;
+        let dayAtt = 0;
+        let dayBunk = 0;
+        Object.entries(dayObj).forEach(([k, status]) => {
+          if (k === "isHoliday" || !k.includes("#")) return;
+          const kSub = k.split("#").slice(1).join("#");
+          if (kSub !== subject) return;
+          if (status === "attended") dayAtt += 1;
+          else if (status === "bunked") dayBunk += 1;
+        });
+        if (dayAtt + dayBunk > 0) {
+          const dt = parseLocalDate(dateKey);
+          loggedAttended += dayAtt;
+          loggedBunked += dayBunk;
+          loggedDays.push({
+            dateKey,
+            weekday: DAY_SHORT[dt.getDay()],
+            shortDate: formatShortMonthDay(dt),
+            attended: dayAtt,
+            bunked: dayBunk,
+            total: dayAtt + dayBunk,
+            isEstimated: false
+          });
+        }
+      });
+
+    // Reconstruct prior scheduled days if total exceeds logged dailyMarks (e.g. demo/edited baseline)
+    const targetAtt = Math.max(0, Math.floor(Number(rec.attended) || 0));
+    const targetTot = Math.max(targetAtt, Math.floor(Number(rec.total) || 0));
+    const missingAtt = Math.max(0, targetAtt - loggedAttended);
+    const missingBunk = Math.max(0, targetTot - targetAtt - loggedBunked);
+    const missingTotal = missingAtt + missingBunk;
+    const priorDays = [];
+
+    if (missingTotal > 0) {
+      const holidays = new Set(currentState?.settings?.weeklyHolidays || []);
+      const timetable = currentState?.timetable || {};
+      const scheduledWeekdays = new Set();
+      DAY_NAMES.forEach((dayName, idx) => {
+        if ((timetable[dayName] || []).includes(subject)) scheduledWeekdays.add(idx);
+      });
+
+      const slots = [];
+      const startFrom =
+        loggedDays.length > 0
+          ? parseLocalDate(loggedDays[0].dateKey)
+          : new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate());
+      let cursor = new Date(startFrom.getFullYear(), startFrom.getMonth(), startFrom.getDate() - 1);
+      let guard = 0;
+
+      while (slots.length < missingTotal && guard < 180) {
+        const key = isoDate(cursor);
+        const dayIdx = cursor.getDay();
+        const isHoliday = holidays.has(dayIdx) || dailyMarks[key]?.isHoliday;
+        if (!isHoliday) {
+          let countOnDay = 0;
+          if (scheduledWeekdays.size > 0) {
+            countOnDay = (timetable[DAY_NAMES[dayIdx]] || []).filter((s) => s === subject).length;
+          } else {
+            countOnDay = 1;
+          }
+          for (let c = 0; c < countOnDay && slots.length < missingTotal; c++) {
+            slots.push({ dateKey: key, dt: new Date(cursor.getTime()) });
+          }
+        }
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 1);
+        guard += 1;
+      }
+
+      // Oldest first
+      slots.reverse();
+      // Deterministic even spacing for missed slots
+      const bunkSet = new Set();
+      if (missingBunk > 0 && slots.length > 0) {
+        for (let b = 0; b < missingBunk; b++) {
+          const idx = Math.min(slots.length - 1, Math.floor(((b + 0.5) * slots.length) / missingBunk));
+          bunkSet.add(idx);
+        }
+      }
+
+      const grouped = new Map();
+      slots.forEach((slot, i) => {
+        if (!grouped.has(slot.dateKey)) {
+          grouped.set(slot.dateKey, {
+            dateKey: slot.dateKey,
+            weekday: DAY_SHORT[slot.dt.getDay()],
+            shortDate: formatShortMonthDay(slot.dt),
+            attended: 0,
+            bunked: 0,
+            total: 0,
+            isEstimated: true
+          });
+        }
+        const entry = grouped.get(slot.dateKey);
+        if (bunkSet.has(i)) entry.bunked += 1;
+        else entry.attended += 1;
+        entry.total += 1;
+      });
+      priorDays.push(...grouped.values());
+    }
+
+    const combined = [...priorDays, ...loggedDays].sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+    let cumAtt = 0;
+    let cumTot = 0;
+    let daysPresent = 0;
+    const points = combined.map((pt, index) => {
+      cumAtt += pt.attended;
+      cumTot += pt.total;
+      if (pt.attended > 0) daysPresent += 1;
+      return {
+        ...pt,
+        index,
+        cumAttended: cumAtt,
+        cumTotal: cumTot,
+        cumPct: cumTot > 0 ? (cumAtt / cumTot) * 100 : 0
+      };
+    });
+
+    return {
+      points,
+      hasEstimated: priorDays.length > 0,
+      daysPresent,
+      totalDays: points.length,
+      totalAttended: cumAtt,
+      totalHeld: cumTot,
+      totalMissed: Math.max(0, cumTot - cumAtt)
+    };
+  }
+
+  function renderSubjectGraphPanel(subject) {
+    const series = buildSubjectDaySeries(subject, state);
+    const enc = encodeURIComponent(subject);
+
+    if (series.points.length === 0) {
+      return `
+        <div class="subject-graph-panel">
+          <div class="subject-graph-head">
+            <span class="subject-graph-title">📊 ${escapeHtml(subject)} — Attendance Graph</span>
+            <button type="button" class="icon-mini-btn" onclick="openSubjectGraph('${enc}')" aria-label="Close graph">✕</button>
+          </div>
+          <p class="helper-text">No classes recorded yet for ${escapeHtml(subject)}. Mark attendance in Daily Roll Call or edit counts to see your day-by-day graph.</p>
+        </div>
+      `;
+    }
+
+    const pts = series.points;
+    const selectedIdx =
+      graphSelectedIndex !== null && graphSelectedIndex >= 0 && graphSelectedIndex < pts.length
+        ? graphSelectedIndex
+        : pts.length - 1;
+    const sel = pts[selectedIdx];
+
+    const isDaily = graphSubjectMode === "daily";
+    const maxY = Math.max(
+      2,
+      isDaily
+        ? Math.max(...pts.map((p) => p.total))
+        : Math.max(...pts.map((p) => p.cumTotal))
+    );
+
+    const padLeft = 40;
+    const padRight = 16;
+    const padTop = 18;
+    const padBottom = 46;
+    const colWidth = pts.length <= 8 ? 44 : pts.length <= 14 ? 36 : 30;
+    const plotW = Math.max(240, pts.length * colWidth);
+    const svgW = padLeft + plotW + padRight;
+    const plotH = 148;
+    const svgH = padTop + plotH + padBottom;
+
+    // Y-axis ticks (integer steps)
+    const tickStep = maxY <= 5 ? 1 : maxY <= 12 ? 2 : Math.ceil(maxY / 5);
+    const yTicks = [];
+    for (let v = 0; v <= maxY; v += tickStep) {
+      yTicks.push(v);
+    }
+    if (yTicks[yTicks.length - 1] !== maxY) yTicks.push(maxY);
+
+    const gridSvg = yTicks
+      .map((val) => {
+        const y = padTop + plotH - (val / maxY) * plotH;
+        return `
+          <line x1="${padLeft}" y1="${y.toFixed(1)}" x2="${svgW - padRight}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity="0.12" />
+          <text x="${padLeft - 6}" y="${(y + 4).toFixed(1)}" font-size="10.5" fill="currentColor" opacity="0.7" text-anchor="end">${val}</text>
+        `;
+      })
+      .join("");
+
+    let dataSvg = "";
+    if (isDaily) {
+      dataSvg = pts
+        .map((p, i) => {
+          const cx = padLeft + (i + 0.5) * (plotW / pts.length);
+          const barW = Math.min(20, (plotW / pts.length) * 0.6);
+          const hAtt = (p.attended / maxY) * plotH;
+          const hBunk = (p.bunked / maxY) * plotH;
+          const yAtt = padTop + plotH - hAtt;
+          const yBunk = yAtt - hBunk;
+          const isSel = i === selectedIdx;
+
+          return `
+            <g onclick="selectSubjectGraphDay(${i})" style="cursor:pointer;">
+              ${isSel ? `<rect x="${(cx - barW * 0.85).toFixed(1)}" y="${padTop}" width="${(barW * 1.7).toFixed(1)}" height="${plotH}" rx="4" fill="#6366f1" fill-opacity="0.12" />` : ""}
+              ${p.attended > 0 ? `<rect x="${(cx - barW / 2).toFixed(1)}" y="${yAtt.toFixed(1)}" width="${barW.toFixed(1)}" height="${hAtt.toFixed(1)}" rx="4" fill="#10b981"><title>${escapeHtml(p.weekday)} ${escapeHtml(p.shortDate)}: Present ${p.attended}</title></rect>` : ""}
+              ${p.bunked > 0 ? `<rect x="${(cx - barW / 2).toFixed(1)}" y="${yBunk.toFixed(1)}" width="${barW.toFixed(1)}" height="${hBunk.toFixed(1)}" rx="4" fill="#ef4444"><title>${escapeHtml(p.weekday)} ${escapeHtml(p.shortDate)}: Absent ${p.bunked}</title></rect>` : ""}
+              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 15}" font-size="10" fill="currentColor" font-weight="${isSel ? "800" : "600"}" text-anchor="middle">${escapeHtml(p.shortDate)}</text>
+              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 27}" font-size="9" fill="currentColor" opacity="0.65" text-anchor="middle">${escapeHtml(p.weekday)}</text>
+            </g>
+          `;
+        })
+        .join("");
+    } else {
+      // Cumulative Attended vs Total Held (Number on Y-axis, Day on X-axis)
+      const lineCoords = pts
+        .map((p, i) => {
+          const cx = padLeft + (i + 0.5) * (plotW / pts.length);
+          const cy = padTop + plotH - (p.cumAttended / maxY) * plotH;
+          return `${cx.toFixed(1)},${cy.toFixed(1)}`;
+        })
+        .join(" ");
+
+      const barsAndDots = pts
+        .map((p, i) => {
+          const cx = padLeft + (i + 0.5) * (plotW / pts.length);
+          const barW = Math.min(20, (plotW / pts.length) * 0.58);
+          const hTot = (p.cumTotal / maxY) * plotH;
+          const hAtt = (p.cumAttended / maxY) * plotH;
+          const yTot = padTop + plotH - hTot;
+          const yAtt = padTop + plotH - hAtt;
+          const isSel = i === selectedIdx;
+          const dotColor = p.bunked > 0 && p.attended === 0 ? "#ef4444" : "#10b981";
+
+          return `
+            <g onclick="selectSubjectGraphDay(${i})" style="cursor:pointer;">
+              ${isSel ? `<rect x="${(cx - barW * 0.85).toFixed(1)}" y="${padTop}" width="${(barW * 1.7).toFixed(1)}" height="${plotH}" rx="4" fill="#6366f1" fill-opacity="0.12" />` : ""}
+              <rect x="${(cx - barW / 2).toFixed(1)}" y="${yTot.toFixed(1)}" width="${barW.toFixed(1)}" height="${hTot.toFixed(1)}" rx="4" fill="currentColor" fill-opacity="0.12" />
+              <rect x="${(cx - barW / 2).toFixed(1)}" y="${yAtt.toFixed(1)}" width="${barW.toFixed(1)}" height="${hAtt.toFixed(1)}" rx="4" fill="#10b981" fill-opacity="0.72" />
+              <circle cx="${cx.toFixed(1)}" cy="${yAtt.toFixed(1)}" r="${isSel ? 5 : 3.8}" fill="${dotColor}" stroke="#ffffff" stroke-width="1.5" />
+              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 15}" font-size="10" fill="currentColor" font-weight="${isSel ? "800" : "600"}" text-anchor="middle">${escapeHtml(p.shortDate)}</text>
+              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 27}" font-size="9" fill="currentColor" opacity="0.65" text-anchor="middle">${escapeHtml(p.weekday)}</text>
+            </g>
+          `;
+        })
+        .join("");
+
+      dataSvg = `
+        ${barsAndDots}
+        <polyline points="${lineCoords}" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" pointer-events="none" />
+      `;
+    }
+
+    const rateStr = series.totalHeld > 0 ? ((series.totalAttended / series.totalHeld) * 100).toFixed(1) + "%" : "--%";
+    const dayStatusLabel =
+      sel.attended > 0 && sel.bunked === 0
+        ? `Present (${sel.attended}/${sel.total})`
+        : sel.bunked > 0 && sel.attended === 0
+          ? `Absent (${sel.bunked} missed)`
+          : `Present ${sel.attended}, Absent ${sel.bunked}`;
+
+    return `
+      <div class="subject-graph-panel">
+        <div class="subject-graph-head">
+          <span class="subject-graph-title">📊 ${escapeHtml(subject)} — Day &amp; Attendance Graph</span>
+          <div class="subject-graph-controls">
+            <button type="button" class="ai-tab-btn ${!isDaily ? "active" : ""}" onclick="setSubjectGraphMode('cumulative')">Total Attended</button>
+            <button type="button" class="ai-tab-btn ${isDaily ? "active" : ""}" onclick="setSubjectGraphMode('daily')">Per Day</button>
+            <button type="button" class="icon-mini-btn" onclick="openSubjectGraph('${enc}')" aria-label="Close graph" title="Close graph">✕</button>
+          </div>
+        </div>
+
+        <div class="subject-graph-kpis">
+          <div class="sub-kpi-mini"><span>Days Present</span><strong>${series.daysPresent} / ${series.totalDays}</strong></div>
+          <div class="sub-kpi-mini"><span>Attended</span><strong>${series.totalAttended}</strong></div>
+          <div class="sub-kpi-mini"><span>Missed</span><strong>${series.totalMissed}</strong></div>
+          <div class="sub-kpi-mini"><span>Rate</span><strong>${rateStr}</strong></div>
+        </div>
+
+        <div class="subject-graph-svg-wrap">
+          <svg viewBox="0 0 ${svgW} ${svgH}" width="100%" style="min-width:${Math.min(svgW, 340)}px;max-width:${svgW}px;display:block;" role="img" aria-label="${escapeHtml(subject)} attendance by day">
+            <text x="12" y="${padTop + plotH / 2}" font-size="10" font-weight="700" fill="currentColor" opacity="0.65" transform="rotate(-90 12 ${padTop + plotH / 2})" text-anchor="middle">Classes (No.)</text>
+            ${gridSvg}
+            <line x1="${padLeft}" y1="${padTop + plotH}" x2="${svgW - padRight}" y2="${padTop + plotH}" stroke="currentColor" stroke-opacity="0.28" />
+            ${dataSvg}
+            <text x="${padLeft + plotW / 2}" y="${svgH - 4}" font-size="10" font-weight="700" fill="currentColor" opacity="0.65" text-anchor="middle">Day / Date (tap a day to inspect)</text>
+          </svg>
+          <div class="subject-graph-legend">
+            <span><i class="legend-dot" style="background:#10b981;"></i>Attended</span>
+            <span><i class="legend-dot" style="background:#ef4444;"></i>Absent / Missed</span>
+            ${!isDaily ? `<span><i class="legend-dot" style="background:rgba(148,163,184,0.45);"></i>Total Held</span>` : ""}
+          </div>
+        </div>
+
+        <div class="subject-graph-detail">
+          ${escapeHtml(sel.weekday)}, ${escapeHtml(sel.shortDate)}: ${escapeHtml(dayStatusLabel)} • Cumulative: ${sel.cumAttended}/${sel.cumTotal} (${sel.cumPct.toFixed(1)}%)
+        </div>
+        ${
+          series.hasEstimated
+            ? `<div class="subject-graph-note">Prior baseline classes (${series.totalAttended}/${series.totalHeld}) are mapped onto recent scheduled timetable days; new Daily Roll Call entries appear on their exact date.</div>`
+            : ""
+        }
+      </div>
+    `;
   }
 
   /* --- RENDER HOME DASHBOARD --- */
@@ -648,6 +998,7 @@
             const analysis = getBunkAnalysis(d.attended, d.total, targetPct);
             const enc = encodeURIComponent(sub);
             const isEditing = editingSubject === sub;
+            const isGraphOpen = graphSubject === sub;
 
             return `
               <div class="subject-row">
@@ -665,6 +1016,7 @@
                 </div>
                 <div class="subject-actions">
                   <span class="pct-pill status-${analysis.status}">${pStr}</span>
+                  <button type="button" class="icon-mini-btn ${isGraphOpen ? "active-graph" : ""}" onclick="openSubjectGraph('${enc}')" title="View day-by-day attendance graph" aria-label="View graph for ${escapeHtml(sub)}">📊</button>
                   <button type="button" class="icon-mini-btn" onclick="openEditSubject('${enc}')" title="Edit attended / total counts" aria-label="Edit ${escapeHtml(sub)}">✎</button>
                   <button type="button" class="icon-mini-btn danger" onclick="deleteSubject('${enc}')" title="Remove subject" aria-label="Remove ${escapeHtml(sub)}">✕</button>
                 </div>
@@ -686,6 +1038,7 @@
                 `
                     : ""
                 }
+                ${isGraphOpen ? renderSubjectGraphPanel(sub) : ""}
               </div>
             `;
           })

@@ -567,6 +567,116 @@ body {
   border-color: var(--danger);
 }
 
+.icon-mini-btn.active-graph {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.subject-graph-panel {
+  width: 100%;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--border);
+}
+
+.subject-graph-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.subject-graph-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.subject-graph-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.subject-graph-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 480px) {
+  .subject-graph-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.sub-kpi-mini {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 8px;
+}
+
+.sub-kpi-mini span {
+  display: block;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sub-kpi-mini strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.subject-graph-svg-wrap {
+  width: 100%;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 8px 6px;
+}
+
+.subject-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  margin-right: 4px;
+}
+
+.subject-graph-detail {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.subject-graph-note {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
 /* Quick Add Subject */
 .quick-add-form {
   margin-top: 16px;
