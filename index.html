@@ -265,7 +265,7 @@
               <button type="button" id="export-data-btn" class="btn-secondary">⬇ Export Backup</button>
               <button type="button" id="import-data-btn" class="btn-secondary">⬆ Import Backup</button>
               <input type="file" id="import-data-file" accept=".json,application/json" class="hidden">
-              <button type="button" id="reset-sample-btn" class="btn-secondary">Load Demo Data</button>
+              <button type="button" id="reset-sample-btn" class="btn-secondary">Load Default Timetable</button>
               <button type="button" id="wipe-data-btn" class="btn-danger">Clear All &amp; Start Fresh</button>
             </div>
           </div>
@@ -277,7 +277,7 @@
             <h3 class="card-title">Weekly Class Timetable</h3>
           </div>
           <p class="helper-text" style="margin-bottom: 12px;">
-            List each day's classes separated by commas (for example: <code>Maths, Physics, CS</code>). Leave blank for free days.
+            List each day's classes separated by commas (for example: <code>OS, DS, JAVA, PDS</code>). Leave blank for free days.
           </p>
           <div id="timetable-matrix" class="tt-matrix"></div>
           <button type="button" id="save-timetable" class="btn-primary" style="width: 100%;">Save Timetable</button>
@@ -338,6 +338,12 @@
       <div id="chat-charts-body" class="chat-charts-body"></div>
     </div>
   </aside>
+
+  <!-- Full-View Monthly Subject Graph Modal -->
+  <div id="full-graph-backdrop" class="full-graph-backdrop hidden" aria-hidden="true"></div>
+  <section id="full-graph-modal" class="full-graph-modal hidden" role="dialog" aria-modal="true" aria-labelledby="full-graph-title">
+    <div id="full-graph-content" class="full-graph-content"></div>
+  </section>
 
   <!-- Toast Notification -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

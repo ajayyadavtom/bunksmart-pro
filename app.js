@@ -1,7 +1,8 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "bunksmart_pro_state_v2";
+  const STORAGE_KEY = "bunksmart_pro_state_v4";
+  const LEGACY_STORAGE_KEYS = ["bunksmart_pro_state_v3", "bunksmart_pro_state_v2"];
   const THEME_KEY = "bunksmart_theme";
   const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const DISPLAY_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -14,6 +15,12 @@
   let graphSubject = null;
   let graphSubjectMode = "cumulative"; // "cumulative" | "daily"
   let graphSelectedIndex = null;
+  let fullGraphOpen = false;
+  let fullGraphSubject = null;
+  let fullGraphYear = new Date().getFullYear();
+  let fullGraphMonth = new Date().getMonth();
+  let fullGraphMode = "daily"; // "daily" | "cumulative"
+  let fullGraphSelectedDate = null;
 
   /* --- DOM & STRING HELPERS --- */
   function getEl(id) {
@@ -65,24 +72,38 @@
       settings: { weeklyHolidays: [0], targetPercentage: 75, startDate: "", endDate: "" },
       timetable: {
         Sunday: [],
-        Monday: ["Maths", "Physics", "CS"],
-        Tuesday: ["English", "Maths"],
-        Wednesday: ["CS", "Physics"],
-        Thursday: ["Maths", "English"],
-        Friday: ["Physics", "CS", "Lab"],
-        Saturday: []
+        Monday: ["OS", "DS", "JAVA", "PDS", "DDCO", "GIT LAB(A1)"],
+        Tuesday: ["DDCO", "DS", "PDS", "OS", "GIT LAB(A2)", "TUTORIALS"],
+        Wednesday: ["DS", "DDCO", "PDS", "JAVA", "SOCIETAL PROJECT"],
+        Thursday: ["JAVA", "DS", "YOGA", "OS", "DS Lab(A2)/JAVA Lab(A1)", "SOCIETAL PROJECT"],
+        Friday: ["PDS", "OS", "DS Lab(A1)/JAVA Lab(A2)", "DDCO", "JAVA", "TUTORIALS"],
+        Saturday: ["JAVA", "PDS", "OS", "DS", "DIP MATHS", "DIP MATHS", "TUTORIALS"]
       },
       attendance: {
-        Maths: { attended: 10, total: 12, history: [] },
-        Physics: { attended: 8, total: 10, history: [] },
-        CS: { attended: 11, total: 12, history: [] },
-        English: { attended: 5, total: 8, history: [] },
-        Lab: { attended: 2, total: 2, history: [] }
+        OS: { attended: 0, total: 0, history: [] },
+        DS: { attended: 0, total: 0, history: [] },
+        JAVA: { attended: 0, total: 0, history: [] },
+        PDS: { attended: 0, total: 0, history: [] },
+        DDCO: { attended: 0, total: 0, history: [] },
+        "GIT LAB(A1)": { attended: 0, total: 0, history: [] },
+        "GIT LAB(A2)": { attended: 0, total: 0, history: [] },
+        "DS Lab(A1)/JAVA Lab(A2)": { attended: 0, total: 0, history: [] },
+        "DS Lab(A2)/JAVA Lab(A1)": { attended: 0, total: 0, history: [] },
+        "SOCIETAL PROJECT": { attended: 0, total: 0, history: [] },
+        YOGA: { attended: 0, total: 0, history: [] },
+        "DIP MATHS": { attended: 0, total: 0, history: [] },
+        TUTORIALS: { attended: 0, total: 0, history: [] }
       },
       dailyMarks: {},
       sgpaRows: [
-        { subject: "Maths", credits: 4, grade: "A" },
-        { subject: "CS", credits: 4, grade: "A+" }
+        { subject: "PDS", credits: 4, grade: "A" },
+        { subject: "JAVA", credits: 4, grade: "A" },
+        { subject: "DDCO", credits: 4, grade: "A" },
+        { subject: "OS", credits: 3, grade: "A" },
+        { subject: "DS", credits: 3, grade: "A" },
+        { subject: "DS Lab", credits: 1, grade: "A+" },
+        { subject: "GIT", credits: 1, grade: "A+" },
+        { subject: "SOCIETAL PROJECT", credits: 1, grade: "A+" }
       ]
     };
   }
@@ -165,15 +186,45 @@
     return Math.min(max, Math.max(min, val));
   }
 
+  function isLegacyDefaultDemo(parsed) {
+    const tt = parsed?.timetable || {};
+    const mon = tt.Monday;
+    const tue = tt.Tuesday;
+    const fri = tt.Friday;
+    return (
+      Array.isArray(mon) && mon.join(",") === "Maths,Physics,CS" &&
+      Array.isArray(tue) && tue.join(",") === "English,Maths" &&
+      Array.isArray(fri) && fri.join(",") === "Physics,CS,Lab"
+    );
+  }
+
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return buildSampleState();
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object" || !parsed.settings || !parsed.timetable) {
-        return buildSampleState();
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || !parsed.settings || !parsed.timetable) {
+          return buildSampleState();
+        }
+        return sanitizeState(parsed);
       }
-      return sanitizeState(parsed);
+
+      // Migrate custom user data from prior storage keys, but upgrade any old Maths/Physics/CS demo to the 3rd Sem CSE default timetable
+      for (const legacyKey of LEGACY_STORAGE_KEYS) {
+        const legacyRaw = localStorage.getItem(legacyKey);
+        if (!legacyRaw) continue;
+        const legacyParsed = JSON.parse(legacyRaw);
+        if (legacyParsed && typeof legacyParsed === "object" && legacyParsed.settings && legacyParsed.timetable) {
+          if (!isLegacyDefaultDemo(legacyParsed)) {
+            const migrated = sanitizeState(legacyParsed);
+            saveState(migrated);
+            return migrated;
+          }
+          break;
+        }
+      }
+
+      return buildSampleState();
     } catch (e) {
       return buildSampleState();
     }
@@ -851,16 +902,19 @@
           const yTot = padTop + plotH - hTot;
           const yAtt = padTop + plotH - hAtt;
           const isSel = i === selectedIdx;
-          const dotColor = p.bunked > 0 && p.attended === 0 ? "#ef4444" : "#10b981";
+          const hasBunk = p.bunked > 0;
+          const dotColor = hasBunk && p.attended === 0 ? "#ef4444" : "#10b981";
+          const missH = Math.max(0, ((p.cumTotal - p.cumAttended) / maxY) * plotH);
 
           return `
             <g onclick="selectSubjectGraphDay(${i})" style="cursor:pointer;">
               ${isSel ? `<rect x="${(cx - barW * 0.85).toFixed(1)}" y="${padTop}" width="${(barW * 1.7).toFixed(1)}" height="${plotH}" rx="4" fill="#6366f1" fill-opacity="0.12" />` : ""}
               <rect x="${(cx - barW / 2).toFixed(1)}" y="${yTot.toFixed(1)}" width="${barW.toFixed(1)}" height="${hTot.toFixed(1)}" rx="4" fill="currentColor" fill-opacity="0.12" />
               <rect x="${(cx - barW / 2).toFixed(1)}" y="${yAtt.toFixed(1)}" width="${barW.toFixed(1)}" height="${hAtt.toFixed(1)}" rx="4" fill="#10b981" fill-opacity="0.72" />
+              ${hasBunk ? `<rect x="${(cx - barW / 2).toFixed(1)}" y="${yTot.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(4, missH).toFixed(1)}" rx="4" fill="#ef4444" fill-opacity="0.82" />` : ""}
               <circle cx="${cx.toFixed(1)}" cy="${yAtt.toFixed(1)}" r="${isSel ? 5 : 3.8}" fill="${dotColor}" stroke="#ffffff" stroke-width="1.5" />
-              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 15}" font-size="10" fill="currentColor" font-weight="${isSel ? "800" : "600"}" text-anchor="middle">${escapeHtml(p.shortDate)}</text>
-              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 27}" font-size="9" fill="currentColor" opacity="0.65" text-anchor="middle">${escapeHtml(p.weekday)}</text>
+              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 15}" font-size="10" fill="${hasBunk ? "#ef4444" : "currentColor"}" font-weight="${isSel || hasBunk ? "800" : "600"}" text-anchor="middle">${escapeHtml(p.shortDate)}</text>
+              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 27}" font-size="9" fill="${hasBunk ? "#ef4444" : "currentColor"}" opacity="${hasBunk ? "0.9" : "0.65"}" text-anchor="middle">${escapeHtml(p.weekday)}</text>
             </g>
           `;
         })
@@ -887,6 +941,7 @@
           <div class="subject-graph-controls">
             <button type="button" class="ai-tab-btn ${!isDaily ? "active" : ""}" onclick="setSubjectGraphMode('cumulative')">Total Attended</button>
             <button type="button" class="ai-tab-btn ${isDaily ? "active" : ""}" onclick="setSubjectGraphMode('daily')">Per Day</button>
+            <button type="button" class="ai-tab-btn" onclick="openFullGraphModal('${enc}')" title="Open full monthly graph">⛶ View Full</button>
             <button type="button" class="icon-mini-btn" onclick="openSubjectGraph('${enc}')" aria-label="Close graph" title="Close graph">✕</button>
           </div>
         </div>
@@ -923,6 +978,452 @@
         }
       </div>
     `;
+  }
+
+  /* --- FULL-VIEW MONTHLY SUBJECT GRAPH MODAL --- */
+  function getAvailableMonthsForSubject(series) {
+    const now = new Date();
+    const curIdx = now.getFullYear() * 12 + now.getMonth();
+    let minIdx = curIdx - 3; // Default 4-month span (Month 1 .. Month 4)
+    let maxIdx = curIdx;
+
+    const considerDate = (dateStr) => {
+      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+      const d = parseLocalDate(dateStr);
+      const idx = d.getFullYear() * 12 + d.getMonth();
+      if (idx < minIdx) minIdx = idx;
+      if (idx > maxIdx) maxIdx = idx;
+    };
+
+    considerDate(state.settings?.startDate);
+    considerDate(state.settings?.endDate);
+    series.points.forEach((p) => considerDate(p.dateKey));
+
+    // Cap to a reasonable 12-month window if user enters distant dates
+    if (maxIdx - minIdx > 11) {
+      minIdx = maxIdx - 11;
+    }
+
+    const monthShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthFull = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+
+    const months = [];
+    for (let idx = minIdx, num = 1; idx <= maxIdx; idx++, num++) {
+      const y = Math.floor(idx / 12);
+      const m = idx % 12;
+      months.push({
+        year: y,
+        month: m,
+        monthNumber: num,
+        tabLabel: `Month ${num} • ${monthShort[m]}`,
+        fullLabel: `${monthFull[m]} ${y}`
+      });
+    }
+    return months;
+  }
+
+  function buildMonthlyCalendarDays(subject, year, month) {
+    const series = buildSubjectDaySeries(subject, state);
+    const pointMap = new Map(series.points.map((p) => [p.dateKey, p]));
+    const holidays = new Set(state.settings?.weeklyHolidays || []);
+    const dailyMarks = state.dailyMarks || {};
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstWeekday = new Date(year, month, 1).getDay();
+
+    const days = [];
+    let monthAttended = 0;
+    let monthAbsent = 0;
+    let monthDaysPresent = 0;
+    let monthDaysAbsent = 0;
+    let prevCumAtt = 0;
+    let prevCumTot = 0;
+
+    // Seed cumulative baseline from points strictly before this month
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}-`;
+    series.points.forEach((p) => {
+      if (p.dateKey < monthPrefix) {
+        prevCumAtt = p.cumAttended;
+        prevCumTot = p.cumTotal;
+      }
+    });
+
+    let runningAtt = prevCumAtt;
+    let runningTot = prevCumTot;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dt = new Date(year, month, day);
+      const dateKey = isoDate(dt);
+      const weekdayIdx = dt.getDay();
+      const pt = pointMap.get(dateKey);
+      const isHoliday = holidays.has(weekdayIdx) || Boolean(dailyMarks[dateKey]?.isHoliday);
+
+      let status = "none";
+      let attended = 0;
+      let bunked = 0;
+      if (pt) {
+        attended = pt.attended;
+        bunked = pt.bunked;
+        monthAttended += attended;
+        monthAbsent += bunked;
+        runningAtt += attended;
+        runningTot += attended + bunked;
+
+        if (bunked > 0 && attended === 0) {
+          status = "absent";
+          monthDaysAbsent += 1;
+        } else if (attended > 0 && bunked === 0) {
+          status = "present";
+          monthDaysPresent += 1;
+        } else if (attended > 0 && bunked > 0) {
+          status = "mixed";
+          monthDaysPresent += 1;
+          monthDaysAbsent += 1;
+        }
+      } else if (isHoliday) {
+        status = "holiday";
+      }
+
+      days.push({
+        day,
+        dateKey,
+        weekday: DAY_SHORT[weekdayIdx],
+        shortDate: formatShortMonthDay(dt),
+        status,
+        attended,
+        bunked,
+        total: attended + bunked,
+        cumAttended: runningAtt,
+        cumTotal: runningTot,
+        isEstimated: Boolean(pt?.isEstimated)
+      });
+    }
+
+    return {
+      series,
+      daysInMonth,
+      firstWeekday,
+      days,
+      monthAttended,
+      monthAbsent,
+      monthTotal: monthAttended + monthAbsent,
+      monthDaysPresent,
+      monthDaysAbsent
+    };
+  }
+
+  function renderFullGraphModal() {
+    const content = getEl("full-graph-content");
+    if (!content || !fullGraphOpen || !fullGraphSubject) return;
+
+    const subject = fullGraphSubject;
+    const subjectsList = Object.keys(state.attendance);
+    const calData = buildMonthlyCalendarDays(subject, fullGraphYear, fullGraphMonth);
+    const months = getAvailableMonthsForSubject(calData.series);
+
+    let activeMonthIdx = months.findIndex((m) => m.year === fullGraphYear && m.month === fullGraphMonth);
+    if (activeMonthIdx === -1 && months.length > 0) {
+      activeMonthIdx = months.length - 1;
+      fullGraphYear = months[activeMonthIdx].year;
+      fullGraphMonth = months[activeMonthIdx].month;
+    }
+    const activeMonthObj = months[activeMonthIdx] || { fullLabel: `${fullGraphYear}-${fullGraphMonth + 1}`, monthNumber: 1 };
+
+    const days = calData.days;
+    // Default selected date: explicit selection in this month, or latest class day in month, or day 1
+    let selDay = days.find((d) => d.dateKey === fullGraphSelectedDate);
+    if (!selDay) {
+      const activeDays = days.filter((d) => d.total > 0);
+      selDay = activeDays.length > 0 ? activeDays[activeDays.length - 1] : days[0];
+      fullGraphSelectedDate = selDay ? selDay.dateKey : null;
+    }
+
+    // Build Full Monthly SVG Chart covering ALL dates (1..daysInMonth)
+    const isDaily = fullGraphMode === "daily";
+    const maxY = Math.max(
+      2,
+      isDaily
+        ? Math.max(1, ...days.map((d) => d.total))
+        : Math.max(1, ...days.map((d) => d.cumTotal))
+    );
+
+    const padLeft = 44;
+    const padRight = 16;
+    const padTop = 20;
+    const padBottom = 42;
+    const colW = 24;
+    const plotW = days.length * colW;
+    const svgW = padLeft + plotW + padRight;
+    const plotH = 190;
+    const svgH = padTop + plotH + padBottom;
+
+    const tickStep = maxY <= 5 ? 1 : maxY <= 14 ? 2 : Math.ceil(maxY / 6);
+    const yTicks = [];
+    for (let v = 0; v <= maxY; v += tickStep) yTicks.push(v);
+    if (yTicks[yTicks.length - 1] !== maxY) yTicks.push(maxY);
+
+    const gridSvg = yTicks
+      .map((val) => {
+        const y = padTop + plotH - (val / maxY) * plotH;
+        return `
+          <line x1="${padLeft}" y1="${y.toFixed(1)}" x2="${svgW - padRight}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity="0.12" />
+          <text x="${padLeft - 8}" y="${(y + 4).toFixed(1)}" font-size="11" fill="currentColor" opacity="0.72" text-anchor="end">${val}</text>
+        `;
+      })
+      .join("");
+
+    let barsSvg = "";
+    if (isDaily) {
+      barsSvg = days
+        .map((d, i) => {
+          const cx = padLeft + (i + 0.5) * colW;
+          const bw = 15;
+          const isSel = selDay && d.dateKey === selDay.dateKey;
+          const hAtt = (d.attended / maxY) * plotH;
+          const hBunk = (d.bunked / maxY) * plotH;
+          const yAtt = padTop + plotH - hAtt;
+          const yBunk = yAtt - hBunk;
+          const isAbs = d.status === "absent" || d.status === "mixed";
+          const lblColor = isAbs ? "#ef4444" : d.status === "present" ? "#10b981" : "currentColor";
+
+          return `
+            <g onclick="selectFullGraphDate('${d.dateKey}')" style="cursor:pointer;">
+              ${isSel ? `<rect x="${(cx - colW / 2 + 1).toFixed(1)}" y="${padTop}" width="${colW - 2}" height="${plotH}" rx="4" fill="#6366f1" fill-opacity="0.16" />` : ""}
+              ${d.total === 0 ? `<rect x="${(cx - bw / 2).toFixed(1)}" y="${padTop + plotH - 4}" width="${bw}" height="4" rx="2" fill="currentColor" fill-opacity="${d.status === "holiday" ? "0.1" : "0.18"}" />` : ""}
+              ${d.attended > 0 ? `<rect x="${(cx - bw / 2).toFixed(1)}" y="${yAtt.toFixed(1)}" width="${bw}" height="${hAtt.toFixed(1)}" rx="4" fill="#10b981"><title>${d.weekday}, ${d.shortDate}: Present (${d.attended})</title></rect>` : ""}
+              ${d.bunked > 0 ? `<rect x="${(cx - bw / 2).toFixed(1)}" y="${yBunk.toFixed(1)}" width="${bw}" height="${hBunk.toFixed(1)}" rx="4" fill="#ef4444"><title>${d.weekday}, ${d.shortDate}: Absent (${d.bunked})</title></rect>` : ""}
+              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 15}" font-size="10.5" fill="${lblColor}" font-weight="${isAbs || isSel ? "800" : "600"}" opacity="${d.total === 0 ? "0.55" : "1"}" text-anchor="middle">${d.day}</text>
+              <text x="${cx.toFixed(1)}" y="${padTop + plotH + 27}" font-size="8.5" fill="${isAbs ? "#ef4444" : "currentColor"}" opacity="${isAbs ? "0.95" : "0.55"}" text-anchor="middle">${d.weekday.slice(0, 2)}</text>
+            </g>
+          `;
+        })
+        .join("");
+    } else {
+      const lineCoords = days
+        .map((d, i) => {
+          const cx = padLeft + (i + 0.5) * colW;
+          const cy = padTop + plotH - (d.cumAttended / maxY) * plotH;
+          return `${cx.toFixed(1)},${cy.toFixed(1)}`;
+        })
+        .join(" ");
+
+      barsSvg =
+        days
+          .map((d, i) => {
+            const cx = padLeft + (i + 0.5) * colW;
+            const bw = 15;
+            const isSel = selDay && d.dateKey === selDay.dateKey;
+            const hTot = (d.cumTotal / maxY) * plotH;
+            const hAtt = (d.cumAttended / maxY) * plotH;
+            const yTot = padTop + plotH - hTot;
+            const yAtt = padTop + plotH - hAtt;
+            const missH = Math.max(0, hTot - hAtt);
+            const isAbs = d.status === "absent" || d.status === "mixed";
+
+            return `
+              <g onclick="selectFullGraphDate('${d.dateKey}')" style="cursor:pointer;">
+                ${isSel ? `<rect x="${(cx - colW / 2 + 1).toFixed(1)}" y="${padTop}" width="${colW - 2}" height="${plotH}" rx="4" fill="#6366f1" fill-opacity="0.16" />` : ""}
+                <rect x="${(cx - bw / 2).toFixed(1)}" y="${yTot.toFixed(1)}" width="${bw}" height="${hTot.toFixed(1)}" rx="3" fill="currentColor" fill-opacity="0.1" />
+                <rect x="${(cx - bw / 2).toFixed(1)}" y="${yAtt.toFixed(1)}" width="${bw}" height="${hAtt.toFixed(1)}" rx="3" fill="#10b981" fill-opacity="0.72" />
+                ${isAbs ? `<rect x="${(cx - bw / 2).toFixed(1)}" y="${yTot.toFixed(1)}" width="${bw}" height="${Math.max(4, missH).toFixed(1)}" rx="3" fill="#ef4444" fill-opacity="0.88" />` : ""}
+                ${d.total > 0 ? `<circle cx="${cx.toFixed(1)}" cy="${yAtt.toFixed(1)}" r="${isSel ? 5 : 3.5}" fill="${isAbs ? "#ef4444" : "#10b981"}" stroke="#fff" stroke-width="1.5" />` : ""}
+                <text x="${cx.toFixed(1)}" y="${padTop + plotH + 15}" font-size="10.5" fill="${isAbs ? "#ef4444" : "currentColor"}" font-weight="${isAbs || isSel ? "800" : "600"}" opacity="${d.total === 0 ? "0.55" : "1"}" text-anchor="middle">${d.day}</text>
+              </g>
+            `;
+          })
+          .join("") +
+        `<polyline points="${lineCoords}" fill="none" stroke="#10b981" stroke-width="2" pointer-events="none" />`;
+    }
+
+    const monthRate = calData.monthTotal > 0 ? ((calData.monthAttended / calData.monthTotal) * 100).toFixed(1) + "%" : "--%";
+    const leadBlanks = Array.from({ length: calData.firstWeekday }, () => `<div class="cal-day-cell empty"></div>`).join("");
+    const calCells = days
+      .map((d) => {
+        const isSel = selDay && d.dateKey === selDay.dateKey;
+        const tag =
+          d.status === "present"
+            ? `✓ ${d.attended}`
+            : d.status === "absent"
+              ? `✕ ${d.bunked}`
+              : d.status === "mixed"
+                ? `${d.attended}/${d.total}`
+                : d.status === "holiday"
+                  ? "Hol"
+                  : "·";
+        return `
+          <button type="button" onclick="selectFullGraphDate('${d.dateKey}')" class="cal-day-cell ${d.status} ${isSel ? "selected" : ""}">
+            <span class="cal-day-num">${d.day}</span>
+            <span class="cal-day-tag">${tag}</span>
+          </button>
+        `;
+      })
+      .join("");
+
+    const selStatusText = !selDay
+      ? "Tap any date to inspect"
+      : selDay.status === "present"
+        ? `Present (${selDay.attended}/${selDay.total})`
+        : selDay.status === "absent"
+          ? `Absent (${selDay.bunked} missed)`
+          : selDay.status === "mixed"
+            ? `Present ${selDay.attended}, Absent ${selDay.bunked}`
+            : selDay.status === "holiday"
+              ? "Holiday / No classes"
+              : "No class logged";
+
+    content.innerHTML = `
+      <div class="full-graph-header">
+        <div class="full-graph-title-group">
+          <h2 id="full-graph-title">📊 Full Monthly Graph</h2>
+          <select id="full-graph-subject-select" class="form-input full-graph-sub-select" onchange="switchFullGraphSubject(this.value)" aria-label="Select subject">
+            ${subjectsList.map((s) => `<option value="${escapeHtml(s)}" ${s === subject ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="subject-graph-controls">
+          <button type="button" class="ai-tab-btn ${isDaily ? "active" : ""}" onclick="setFullGraphMode('daily')">All Dates (Per Day)</button>
+          <button type="button" class="ai-tab-btn ${!isDaily ? "active" : ""}" onclick="setFullGraphMode('cumulative')">Cumulative</button>
+          <button type="button" class="icon-mini-btn" onclick="closeFullGraphModal()" aria-label="Close full view" title="Close">✕</button>
+        </div>
+      </div>
+
+      <div class="full-graph-body">
+        <div class="month-nav-bar">
+          <div style="display:flex;align-items:center;gap:6px;max-width:100%;">
+            <button type="button" class="month-arrow-btn" onclick="stepFullGraphMonth(-1)" ${activeMonthIdx <= 0 ? "disabled" : ""} aria-label="Previous month">‹</button>
+            <div class="month-tabs-scroll">
+              ${months
+                .map(
+                  (m, idx) =>
+                    `<button type="button" class="month-pill ${idx === activeMonthIdx ? "active" : ""}" onclick="selectFullGraphMonth(${m.year}, ${m.month})">${escapeHtml(m.tabLabel)}</button>`
+                )
+                .join("")}
+            </div>
+            <button type="button" class="month-arrow-btn" onclick="stepFullGraphMonth(1)" ${activeMonthIdx >= months.length - 1 ? "disabled" : ""} aria-label="Next month">›</button>
+          </div>
+          <span class="pill-muted">${escapeHtml(activeMonthObj.fullLabel)}</span>
+        </div>
+
+        <div class="subject-graph-kpis">
+          <div class="sub-kpi-mini"><span>Month Attended</span><strong style="color:var(--success);">${calData.monthAttended}</strong></div>
+          <div class="sub-kpi-mini"><span>Month Absent</span><strong style="color:var(--danger);">${calData.monthAbsent}</strong></div>
+          <div class="sub-kpi-mini"><span>Month Rate</span><strong>${monthRate}</strong></div>
+          <div class="sub-kpi-mini"><span>Overall (${escapeHtml(subject)})</span><strong>${calData.series.totalAttended}/${calData.series.totalHeld}</strong></div>
+        </div>
+
+        <div class="full-graph-svg-card">
+          <svg viewBox="0 0 ${svgW} ${svgH}" width="100%" style="min-width:680px;max-width:${svgW}px;display:block;" role="img" aria-label="${escapeHtml(subject)} ${escapeHtml(activeMonthObj.fullLabel)} attendance chart">
+            <text x="14" y="${padTop + plotH / 2}" font-size="11" font-weight="700" fill="currentColor" opacity="0.65" transform="rotate(-90 14 ${padTop + plotH / 2})" text-anchor="middle">Classes (No.)</text>
+            ${gridSvg}
+            <line x1="${padLeft}" y1="${padTop + plotH}" x2="${svgW - padRight}" y2="${padTop + plotH}" stroke="currentColor" stroke-opacity="0.28" />
+            ${barsSvg}
+            <text x="${padLeft + plotW / 2}" y="${svgH - 4}" font-size="11" font-weight="700" fill="currentColor" opacity="0.65" text-anchor="middle">${escapeHtml(activeMonthObj.fullLabel)} — Dates (1 to ${calData.daysInMonth})</text>
+          </svg>
+          <div class="subject-graph-legend">
+            <span><i class="legend-dot" style="background:#10b981;"></i>Present Day</span>
+            <span><i class="legend-dot" style="background:#ef4444;"></i>Absent Day (Red)</span>
+            <span><i class="legend-dot" style="background:rgba(148,163,184,0.35);"></i>No Class / Holiday</span>
+          </div>
+        </div>
+
+        ${
+          selDay
+            ? `<div class="subject-graph-detail" style="margin-bottom:12px;${selDay.status === "absent" ? "background:var(--danger-bg);color:var(--danger);" : ""}">
+                ${escapeHtml(selDay.weekday)}, ${escapeHtml(selDay.shortDate)} (${escapeHtml(selDay.dateKey)}): ${escapeHtml(selStatusText)} • Running Total: ${selDay.cumAttended}/${selDay.cumTotal}
+              </div>`
+            : ""
+        }
+
+        <div class="cal-grid-card">
+          <div class="cal-grid-head">
+            <h3>All Dates in ${escapeHtml(activeMonthObj.fullLabel)}</h3>
+            <span class="hint">Green = Present • Red = Absent</span>
+          </div>
+          <div class="cal-weekdays">
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+          </div>
+          <div class="cal-days">
+            ${leadBlanks}${calCells}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (typeof window !== "undefined") {
+    window.openFullGraphModal = function (encodedSub) {
+      const sub = decodeURIComponent(encodedSub);
+      if (!state.attendance[sub]) return;
+      fullGraphSubject = sub;
+      fullGraphOpen = true;
+      fullGraphSelectedDate = null;
+
+      const series = buildSubjectDaySeries(sub, state);
+      if (series.points.length > 0) {
+        const latest = parseLocalDate(series.points[series.points.length - 1].dateKey);
+        fullGraphYear = latest.getFullYear();
+        fullGraphMonth = latest.getMonth();
+      } else {
+        const now = new Date();
+        fullGraphYear = now.getFullYear();
+        fullGraphMonth = now.getMonth();
+      }
+
+      const modal = getEl("full-graph-modal");
+      const backdrop = getEl("full-graph-backdrop");
+      if (modal) modal.classList.remove("hidden");
+      if (backdrop) backdrop.classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+      renderFullGraphModal();
+    };
+
+    window.closeFullGraphModal = function () {
+      fullGraphOpen = false;
+      const modal = getEl("full-graph-modal");
+      const backdrop = getEl("full-graph-backdrop");
+      if (modal) modal.classList.add("hidden");
+      if (backdrop) backdrop.classList.add("hidden");
+      if (!chatDrawerOpen) document.body.style.overflow = "";
+    };
+
+    window.switchFullGraphSubject = function (sub) {
+      if (!state.attendance[sub]) return;
+      fullGraphSubject = sub;
+      fullGraphSelectedDate = null;
+      renderFullGraphModal();
+    };
+
+    window.selectFullGraphMonth = function (year, month) {
+      fullGraphYear = Number(year);
+      fullGraphMonth = Number(month);
+      fullGraphSelectedDate = null;
+      renderFullGraphModal();
+    };
+
+    window.stepFullGraphMonth = function (delta) {
+      if (!fullGraphSubject) return;
+      const series = buildSubjectDaySeries(fullGraphSubject, state);
+      const months = getAvailableMonthsForSubject(series);
+      const curIdx = months.findIndex((m) => m.year === fullGraphYear && m.month === fullGraphMonth);
+      const nextIdx = curIdx + delta;
+      if (nextIdx >= 0 && nextIdx < months.length) {
+        fullGraphYear = months[nextIdx].year;
+        fullGraphMonth = months[nextIdx].month;
+        fullGraphSelectedDate = null;
+        renderFullGraphModal();
+      }
+    };
+
+    window.setFullGraphMode = function (mode) {
+      fullGraphMode = mode === "cumulative" ? "cumulative" : "daily";
+      renderFullGraphModal();
+    };
+
+    window.selectFullGraphDate = function (dateKey) {
+      fullGraphSelectedDate = dateKey;
+      renderFullGraphModal();
+    };
   }
 
   /* --- RENDER HOME DASHBOARD --- */
@@ -1334,7 +1835,7 @@
           <span class="rc-slot-label">+ Log an Extra / Makeup Class</span>
         </div>
         <div class="rc-extra-row">
-          <input type="text" id="rc-extra-sub" list="all-subjects" class="form-input" placeholder="e.g. Maths Lab">
+          <input type="text" id="rc-extra-sub" list="all-subjects" class="form-input" placeholder="e.g. DS Lab">
           <button type="button" class="rc-btn rc-present" onclick="handleAddExtraClass('attended')">✓ Present</button>
           <button type="button" class="rc-btn rc-absent" onclick="handleAddExtraClass('bunked')">✕ Absent</button>
         </div>
@@ -1440,7 +1941,7 @@
         return `
           <div class="tt-edit-row">
             <label for="tt-in-${day}" class="tt-day-lbl">${day.slice(0, 3)}</label>
-            <input type="text" id="tt-in-${day}" class="form-input" value="${escapeHtml((state.timetable[day] || []).join(", "))}" placeholder="${isHoliday ? "Weekly holiday" : "e.g. Maths, Physics, CS"}">
+            <input type="text" id="tt-in-${day}" class="form-input" value="${escapeHtml((state.timetable[day] || []).join(", "))}" placeholder="${isHoliday ? "Weekly holiday" : "e.g. OS, DS, JAVA, PDS"}">
           </div>
         `;
       }).join("");
@@ -1509,11 +2010,11 @@
     const sampleBtn = getEl("reset-sample-btn");
     if (sampleBtn) {
       sampleBtn.onclick = () => {
-        if (confirm("Replace your current data with demo sample classes?")) {
+        if (confirm("Replace your current data with the default 3rd Sem CSE timetable?")) {
           state = buildSampleState();
           saveState(state);
           renderAll();
-          showToast("Demo sample data loaded.", "info");
+          showToast("Default 3rd Sem CSE timetable loaded.", "info");
         }
       };
     }
@@ -1908,7 +2409,7 @@
   }
 
   function buildSuggestedQuestions(subjectNames, focusSubject) {
-    const sub1 = focusSubject || subjectNames[0] || "Maths";
+    const sub1 = focusSubject || subjectNames[0] || "OS";
     const sub2 = subjectNames.find((s) => s !== sub1) || sub1;
     if (focusSubject) {
       return [
@@ -2356,7 +2857,7 @@
     if (!container) return;
 
     const metrics = computeAllMetrics(state);
-    const firstSub = metrics.subjects[0]?.subject || "Maths";
+    const firstSub = metrics.subjects[0]?.subject || "OS";
     const starterPrompts = [
       "How many classes can I bunk?",
       "How many classes have I burned?",
@@ -2583,9 +3084,18 @@
       });
     }
 
+    const fgBackdrop = getEl("full-graph-backdrop");
+    if (fgBackdrop) fgBackdrop.addEventListener("click", () => {
+      if (typeof window !== "undefined" && window.closeFullGraphModal) window.closeFullGraphModal();
+    });
+
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && chatDrawerOpen) {
-        closeChatDrawer();
+      if (e.key === "Escape") {
+        if (fullGraphOpen && typeof window !== "undefined" && window.closeFullGraphModal) {
+          window.closeFullGraphModal();
+        } else if (chatDrawerOpen) {
+          closeChatDrawer();
+        }
       }
     });
   }
@@ -2638,6 +3148,9 @@
     renderPredictor();
     if (chatDrawerOpen) {
       renderChatDrawer();
+    }
+    if (fullGraphOpen) {
+      renderFullGraphModal();
     }
   }
 
