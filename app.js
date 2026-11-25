@@ -3,6 +3,12 @@
 
   const STORAGE_KEY = "bunksmart_pro_state_v4";
   const LEGACY_STORAGE_KEYS = ["bunksmart_pro_state_v3", "bunksmart_pro_state_v2"];
+  const USERS_REGISTRY_KEY = "bunksmart_users_registry_v1";
+  const ACTIVE_ROLL_KEY = "bunksmart_active_roll_v1";
+  const USER_STATE_PREFIX = "bunksmart_user_data_v1_";
+  const AUTO_DOWNLOAD_PREF_KEY = "bunksmart_auto_download_v1";
+  const PHONE_DB_NAME = "BunkSmartPhoneDB";
+  const PHONE_DB_VERSION = 1;
   const THEME_KEY = "bunksmart_theme";
   const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const DISPLAY_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -21,6 +27,14 @@
   let fullGraphMonth = new Date().getMonth();
   let fullGraphMode = "daily"; // "daily" | "cumulative"
   let fullGraphSelectedDate = null;
+  let rcCalendarOpen = false;
+  let rcCalendarYear = new Date().getFullYear();
+  let rcCalendarMonth = new Date().getMonth();
+  let phoneDbInstance = null;
+  let phoneDirectoryHandle = null;
+  let phonePersistGranted = null;
+  let lastFileSyncAt = null;
+  let lastFileSyncStatus = "Phone DB ready";
 
   /* --- DOM & STRING HELPERS --- */
   function getEl(id) {
@@ -198,8 +212,90 @@
     );
   }
 
+  /* --- STUDENT PHONE-LOCAL AUTH, DATABASE & MONTHLY FILES --- */
+  function normalizeRollNo(rawRoll) {
+    return String(rawRoll || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, "");
+  }
+
+  function loadUsersRegistry() {
+    try {
+      const raw = localStorage.getItem(USERS_REGISTRY_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveUsersRegistry(registry) {
+    try {
+      localStorage.setItem(USERS_REGISTRY_KEY, JSON.stringify(registry));
+    } catch (e) {
+      // Ignore storage error
+    }
+  }
+
+  function getActiveRollNo() {
+    try {
+      return normalizeRollNo(localStorage.getItem(ACTIVE_ROLL_KEY) || "");
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function setActiveRollNo(rollNo) {
+    try {
+      if (rollNo) localStorage.setItem(ACTIVE_ROLL_KEY, rollNo);
+      else localStorage.removeItem(ACTIVE_ROLL_KEY);
+    } catch (e) {
+      // Ignore storage error
+    }
+  }
+
+  function getActiveUser() {
+    const roll = getActiveRollNo();
+    if (!roll) return null;
+    const reg = loadUsersRegistry();
+    return reg[roll] || null;
+  }
+
+  function userDataStorageKey(rollNo) {
+    return `${USER_STATE_PREFIX}${rollNo}`;
+  }
+
+  function getAutoDownloadEnabled() {
+    try {
+      return localStorage.getItem(AUTO_DOWNLOAD_PREF_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function setAutoDownloadEnabled(enabled) {
+    try {
+      localStorage.setItem(AUTO_DOWNLOAD_PREF_KEY, enabled ? "1" : "0");
+    } catch (e) {
+      // Ignore storage error
+    }
+  }
+
   function loadState() {
     try {
+      const activeRoll = getActiveRollNo();
+      if (activeRoll) {
+        const userRaw = localStorage.getItem(userDataStorageKey(activeRoll));
+        if (userRaw) {
+          const parsedUser = JSON.parse(userRaw);
+          if (parsedUser && typeof parsedUser === "object" && parsedUser.settings && parsedUser.timetable) {
+            return sanitizeState(parsedUser);
+          }
+        }
+      }
+
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -217,7 +313,11 @@
         if (legacyParsed && typeof legacyParsed === "object" && legacyParsed.settings && legacyParsed.timetable) {
           if (!isLegacyDefaultDemo(legacyParsed)) {
             const migrated = sanitizeState(legacyParsed);
-            saveState(migrated);
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+            } catch (e) {
+              // Ignore
+            }
             return migrated;
           }
           break;
@@ -230,12 +330,489 @@
     }
   }
 
-  function saveState(s) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-    } catch (e) {
-      showToast("Could not save changes to browser storage.", "error");
+  function getAvailableMonthKeys(currentState = state, refDate = new Date()) {
+    const months = new Set();
+    const currentMonth = isoDate(refDate).slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(currentMonth)) months.add(currentMonth);
+
+    Object.keys(currentState?.dailyMarks || {}).forEach((dateKey) => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+        months.add(dateKey.slice(0, 7));
+      }
+    });
+
+    return [...months].sort((a, b) => b.localeCompare(a));
+  }
+
+  function formatMonthLabel(monthKey) {
+    if (!/^\d{4}-\d{2}$/.test(String(monthKey || ""))) return String(monthKey || "");
+    const [year, month] = monthKey.split("-").map(Number);
+    const d = new Date(year, month - 1, 1);
+    return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
+
+  function buildMonthlyAttendanceReport(currentState, monthKey, userRecord = getActiveUser()) {
+    const cleanMonth = /^\d{4}-\d{2}$/.test(String(monthKey || "")) ? monthKey : isoDate().slice(0, 7);
+    const dailyMarks = currentState?.dailyMarks || {};
+    const attendance = currentState?.attendance || {};
+    const subjectStats = {};
+    const dailyRecords = [];
+
+    Object.keys(attendance).forEach((sub) => {
+      subjectStats[sub] = { subject: sub, present: 0, absent: 0, cancelled: 0, held: 0 };
+    });
+
+    const monthDates = Object.keys(dailyMarks)
+      .filter((dk) => dk.startsWith(`${cleanMonth}-`))
+      .sort((a, b) => a.localeCompare(b));
+
+    let totalPresent = 0;
+    let totalAbsent = 0;
+    let totalCancelled = 0;
+
+    monthDates.forEach((dateKey) => {
+      const dayMap = dailyMarks[dateKey] || {};
+      const dt = parseLocalDate(dateKey);
+      const weekday = DAY_NAMES[dt.getDay()];
+      const isHoliday = Boolean(dayMap.isHoliday);
+      const entries = [];
+
+      if (!isHoliday) {
+        Object.keys(dayMap)
+          .filter((k) => k !== "isHoliday" && k.includes("#"))
+          .sort((a, b) => Number(a.split("#")[0]) - Number(b.split("#")[0]))
+          .forEach((k) => {
+            const slotIndex = Number(k.split("#")[0]);
+            const subject = k.split("#").slice(1).join("#");
+            const status = dayMap[k];
+            if (!subjectStats[subject]) {
+              subjectStats[subject] = { subject, present: 0, absent: 0, cancelled: 0, held: 0 };
+            }
+            if (status === "attended") {
+              subjectStats[subject].present += 1;
+              subjectStats[subject].held += 1;
+              totalPresent += 1;
+            } else if (status === "bunked") {
+              subjectStats[subject].absent += 1;
+              subjectStats[subject].held += 1;
+              totalAbsent += 1;
+            } else if (status === "holiday") {
+              subjectStats[subject].cancelled += 1;
+              totalCancelled += 1;
+            }
+            entries.push({ slot: slotIndex + 1, subject, status });
+          });
+      }
+
+      dailyRecords.push({ dateKey, weekday, isHoliday, entries });
+    });
+
+    const subjects = Object.values(subjectStats).map((s) => {
+      const cum = attendance[s.subject] || { attended: 0, total: 0 };
+      const monthlyPct = s.held > 0 ? Number(((s.present / s.held) * 100).toFixed(2)) : null;
+      const cumulativePct = cum.total > 0 ? Number(((cum.attended / cum.total) * 100).toFixed(2)) : null;
+      return {
+        ...s,
+        monthlyPct,
+        cumulativeAttended: cum.attended,
+        cumulativeTotal: cum.total,
+        cumulativePct
+      };
+    });
+
+    const totalHeld = totalPresent + totalAbsent;
+    return {
+      monthKey: cleanMonth,
+      monthLabel: formatMonthLabel(cleanMonth),
+      rollNo: userRecord?.displayRollNo || userRecord?.rollNo || "LOCAL",
+      studentName: userRecord?.name || "Student",
+      generatedAt: new Date().toISOString(),
+      totalDaysMarked: dailyRecords.length,
+      overall: {
+        present: totalPresent,
+        absent: totalAbsent,
+        cancelled: totalCancelled,
+        held: totalHeld,
+        monthlyPct: totalHeld > 0 ? Number(((totalPresent / totalHeld) * 100).toFixed(2)) : null
+      },
+      subjects,
+      dailyRecords
+    };
+  }
+
+  function csvCell(value) {
+    const str = String(value ?? "");
+    return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  }
+
+  function buildMonthlyAttendanceCsv(report) {
+    const lines = [
+      ["Month", "RollNo", "StudentName", "Subject", "Present", "Absent", "Cancelled", "TotalHeld", "Monthly%", "CumulativeAttended", "CumulativeTotal", "Cumulative%"].map(csvCell).join(",")
+    ];
+
+    (report.subjects || []).forEach((s) => {
+      lines.push(
+        [
+          report.monthKey,
+          report.rollNo,
+          report.studentName,
+          s.subject,
+          s.present,
+          s.absent,
+          s.cancelled,
+          s.held,
+          s.monthlyPct === null ? "N/A" : `${s.monthlyPct}%`,
+          s.cumulativeAttended,
+          s.cumulativeTotal,
+          s.cumulativePct === null ? "N/A" : `${s.cumulativePct}%`
+        ].map(csvCell).join(",")
+      );
+    });
+
+    lines.push(
+      [
+        report.monthKey,
+        report.rollNo,
+        report.studentName,
+        "OVERALL MONTH",
+        report.overall.present,
+        report.overall.absent,
+        report.overall.cancelled,
+        report.overall.held,
+        report.overall.monthlyPct === null ? "N/A" : `${report.overall.monthlyPct}%`,
+        "",
+        "",
+        ""
+      ].map(csvCell).join(",")
+    );
+
+    if (report.dailyRecords && report.dailyRecords.length > 0) {
+      lines.push("");
+      lines.push(["Date", "Day", "Holiday", "ClassesMarked"].map(csvCell).join(","));
+      report.dailyRecords.forEach((d) => {
+        const markText = d.isHoliday
+          ? "HOLIDAY"
+          : d.entries.map((e) => `${e.slot}:${e.subject}=${e.status}`).join(" | ");
+        lines.push([d.dateKey, d.weekday, d.isHoliday ? "Yes" : "No", markText].map(csvCell).join(","));
+      });
     }
+
+    return lines.join("\n");
+  }
+
+  function buildCompletePhoneDatabasePayload(currentState = state, userRecord = getActiveUser()) {
+    const rollKey = userRecord?.rollNo || "LOCAL";
+    const months = getAvailableMonthKeys(currentState);
+    const monthlyArchives = {};
+    months.forEach((m) => {
+      monthlyArchives[m] = buildMonthlyAttendanceReport(currentState, m, userRecord);
+    });
+
+    const dailyLogs = {};
+    Object.keys(currentState?.dailyMarks || {})
+      .sort()
+      .forEach((dateKey) => {
+        dailyLogs[dateKey] = {
+          dateKey,
+          monthKey: dateKey.slice(0, 7),
+          weekday: DAY_NAMES[parseLocalDate(dateKey).getDay()],
+          ...currentState.dailyMarks[dateKey]
+        };
+      });
+
+    return {
+      schema: "bunksmart-phone-db-v1",
+      savedAt: new Date().toISOString(),
+      user: userRecord || { rollNo: rollKey, displayRollNo: rollKey, name: "Student" },
+      usersOnPhone: Object.values(loadUsersRegistry()),
+      state: currentState,
+      dailyLogs,
+      monthlyArchives
+    };
+  }
+
+  function openPhoneIndexedDB() {
+    if (typeof indexedDB === "undefined") return Promise.resolve(null);
+    if (phoneDbInstance) return Promise.resolve(phoneDbInstance);
+
+    return new Promise((resolve) => {
+      try {
+        const req = indexedDB.open(PHONE_DB_NAME, PHONE_DB_VERSION);
+        req.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains("users")) {
+            db.createObjectStore("users", { keyPath: "rollNo" });
+          }
+          if (!db.objectStoreNames.contains("profiles")) {
+            db.createObjectStore("profiles", { keyPath: "rollNo" });
+          }
+          if (!db.objectStoreNames.contains("daily_logs")) {
+            const ds = db.createObjectStore("daily_logs", { keyPath: "id" });
+            ds.createIndex("by_roll", "rollNo", { unique: false });
+            ds.createIndex("by_month", "monthKey", { unique: false });
+          }
+          if (!db.objectStoreNames.contains("monthly_archives")) {
+            const ms = db.createObjectStore("monthly_archives", { keyPath: "id" });
+            ms.createIndex("by_roll", "rollNo", { unique: false });
+            ms.createIndex("by_month", "monthKey", { unique: false });
+          }
+          if (!db.objectStoreNames.contains("file_handles")) {
+            db.createObjectStore("file_handles", { keyPath: "id" });
+          }
+        };
+        req.onsuccess = (event) => {
+          phoneDbInstance = event.target.result;
+          resolve(phoneDbInstance);
+        };
+        req.onerror = () => resolve(null);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
+
+  function idbPut(db, storeName, value) {
+    if (!db) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(storeName, "readwrite");
+        tx.objectStore(storeName).put(value);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  }
+
+  function idbGet(db, storeName, key) {
+    if (!db) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(storeName, "readonly");
+        const req = tx.objectStore(storeName).get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
+
+  async function writeTextToDirFile(dirHandle, subdirs, filename, content) {
+    let targetDir = dirHandle;
+    for (const sub of subdirs) {
+      targetDir = await targetDir.getDirectoryHandle(sub, { create: true });
+    }
+    const fileHandle = await targetDir.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+  }
+
+  async function writeDatabaseFilesToPhoneFolder(currentState, userRecord, changedDateKey = null) {
+    if (!phoneDirectoryHandle) return false;
+    try {
+      const perm = await phoneDirectoryHandle.queryPermission({ mode: "readwrite" });
+      if (perm !== "granted") {
+        lastFileSyncStatus = "Phone folder needs permission tap";
+        return false;
+      }
+
+      const rollSlug = userRecord?.rollNo || "LOCAL";
+      const rootFolder = `BunkSmart_${rollSlug}`;
+      const dbPayload = buildCompletePhoneDatabasePayload(currentState, userRecord);
+      await writeTextToDirFile(phoneDirectoryHandle, [rootFolder], "database.json", JSON.stringify(dbPayload, null, 2));
+
+      const monthsToWrite = new Set(getAvailableMonthKeys(currentState));
+      if (changedDateKey && /^\d{4}-\d{2}-\d{2}$/.test(changedDateKey)) {
+        monthsToWrite.add(changedDateKey.slice(0, 7));
+        const dayRecord = {
+          rollNo: userRecord?.displayRollNo || rollSlug,
+          studentName: userRecord?.name || "Student",
+          dateKey: changedDateKey,
+          weekday: DAY_NAMES[parseLocalDate(changedDateKey).getDay()],
+          marks: currentState.dailyMarks?.[changedDateKey] || {},
+          savedAt: new Date().toISOString()
+        };
+        await writeTextToDirFile(phoneDirectoryHandle, [rootFolder, "daily"], `${changedDateKey}.json`, JSON.stringify(dayRecord, null, 2));
+      }
+
+      for (const mk of monthsToWrite) {
+        const report = dbPayload.monthlyArchives[mk] || buildMonthlyAttendanceReport(currentState, mk, userRecord);
+        await writeTextToDirFile(phoneDirectoryHandle, [rootFolder, "monthly"], `${mk}.json`, JSON.stringify(report, null, 2));
+        await writeTextToDirFile(phoneDirectoryHandle, [rootFolder, "monthly"], `${mk}.csv`, buildMonthlyAttendanceCsv(report));
+      }
+
+      lastFileSyncAt = new Date().toISOString();
+      lastFileSyncStatus = `Auto-saved files in "${phoneDirectoryHandle.name}/${rootFolder}"`;
+      return true;
+    } catch (e) {
+      lastFileSyncStatus = "Folder write paused — re-link folder";
+      return false;
+    }
+  }
+
+  async function syncToPhoneDatabase(currentState, userRecord, changedDateKey = null) {
+    const db = await openPhoneIndexedDB();
+    const activeUser = userRecord || { rollNo: "LOCAL", displayRollNo: "LOCAL", name: "Student", lastLoginAt: new Date().toISOString() };
+    const now = new Date().toISOString();
+
+    if (db) {
+      await idbPut(db, "users", activeUser);
+      await idbPut(db, "profiles", {
+        rollNo: activeUser.rollNo,
+        displayRollNo: activeUser.displayRollNo,
+        name: activeUser.name,
+        state: currentState,
+        updatedAt: now
+      });
+
+      const dateKeys = changedDateKey ? [changedDateKey] : Object.keys(currentState?.dailyMarks || {});
+      for (const dk of dateKeys) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+        const marks = currentState?.dailyMarks?.[dk] || {};
+        await idbPut(db, "daily_logs", {
+          id: `${activeUser.rollNo}|${dk}`,
+          rollNo: activeUser.rollNo,
+          dateKey: dk,
+          monthKey: dk.slice(0, 7),
+          weekday: DAY_NAMES[parseLocalDate(dk).getDay()],
+          isHoliday: Boolean(marks.isHoliday),
+          marks,
+          updatedAt: now
+        });
+      }
+
+      const monthKeys = new Set(getAvailableMonthKeys(currentState));
+      if (changedDateKey && /^\d{4}-\d{2}-\d{2}$/.test(changedDateKey)) {
+        monthKeys.add(changedDateKey.slice(0, 7));
+      }
+      for (const mk of monthKeys) {
+        const report = buildMonthlyAttendanceReport(currentState, mk, activeUser);
+        await idbPut(db, "monthly_archives", {
+          id: `${activeUser.rollNo}|${mk}`,
+          ...report
+        });
+      }
+    }
+
+    const wroteFolder = await writeDatabaseFilesToPhoneFolder(currentState, activeUser, changedDateKey);
+    if (!wroteFolder) {
+      lastFileSyncAt = now;
+      lastFileSyncStatus = db ? "Saved in Phone DB (IndexedDB + LocalStorage)" : "Saved in LocalStorage";
+    }
+    if (typeof document !== "undefined" && getEl("phone-storage-panel")) {
+      renderPhoneStoragePanel();
+    }
+  }
+
+  function downloadTextFile(filename, content, mimeType = "application/json") {
+    if (typeof document === "undefined" || typeof Blob === "undefined" || typeof URL === "undefined") return;
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function saveState(s, changedDateKey = null) {
+    const activeUser = getActiveUser();
+    try {
+      const serialized = JSON.stringify(s);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      if (activeUser) {
+        localStorage.setItem(userDataStorageKey(activeUser.rollNo), serialized);
+      }
+    } catch (e) {
+      showToast("Could not save changes to phone storage.", "error");
+    }
+
+    if (typeof indexedDB !== "undefined") {
+      syncToPhoneDatabase(s, activeUser, changedDateKey);
+    }
+
+    if (changedDateKey && getAutoDownloadEnabled() && !phoneDirectoryHandle) {
+      const monthKey = changedDateKey.slice(0, 7);
+      const report = buildMonthlyAttendanceReport(s, monthKey, activeUser);
+      const rollSlug = (activeUser?.rollNo || "student").toLowerCase();
+      downloadTextFile(`bunksmart-${rollSlug}-month-${monthKey}.json`, JSON.stringify(report, null, 2), "application/json");
+    }
+  }
+
+  function loginOrRegisterUser(rawName, rawRoll) {
+    const cleanName = String(rawName || "").trim();
+    const displayRollNo = String(rawRoll || "").trim();
+    const rollNo = normalizeRollNo(displayRollNo);
+    if (!cleanName || !rollNo) {
+      return { error: "Please enter both your Name and Roll Number." };
+    }
+
+    const registry = loadUsersRegistry();
+    const now = new Date().toISOString();
+    const existing = registry[rollNo];
+    let loadedState = null;
+    let isNew = false;
+
+    if (existing) {
+      const updatedUser = {
+        ...existing,
+        name: cleanName || existing.name,
+        displayRollNo: displayRollNo || existing.displayRollNo,
+        lastLoginAt: now
+      };
+      registry[rollNo] = updatedUser;
+      saveUsersRegistry(registry);
+      setActiveRollNo(rollNo);
+
+      try {
+        const rawUserState = localStorage.getItem(userDataStorageKey(rollNo));
+        if (rawUserState) {
+          loadedState = sanitizeState(JSON.parse(rawUserState));
+        }
+      } catch (e) {
+        loadedState = null;
+      }
+
+      if (!loadedState) {
+        loadedState = buildSampleState();
+      }
+      state = loadedState;
+      saveState(state);
+      return { isNew: false, user: updatedUser };
+    }
+
+    isNew = true;
+    const newUser = {
+      rollNo,
+      displayRollNo,
+      name: cleanName,
+      createdAt: now,
+      lastLoginAt: now
+    };
+    registry[rollNo] = newUser;
+    saveUsersRegistry(registry);
+    setActiveRollNo(rollNo);
+
+    // If user had already customized data before first login, carry it once; otherwise load default 3rd Sem CSE timetable
+    let initialState = buildSampleState();
+    try {
+      const preRaw = localStorage.getItem(STORAGE_KEY);
+      if (preRaw && Object.keys(registry).length === 1) {
+        const preParsed = JSON.parse(preRaw);
+        if (preParsed && typeof preParsed === "object" && preParsed.settings && preParsed.timetable && !isLegacyDefaultDemo(preParsed)) {
+          initialState = sanitizeState(preParsed);
+        }
+      }
+    } catch (e) {
+      initialState = buildSampleState();
+    }
+
+    state = initialState;
+    saveState(state);
+    return { isNew, user: newUser };
   }
 
   let state = loadState();
@@ -1626,7 +2203,16 @@
     delete state.dailyMarks[dateKey][key];
   }
 
+  function isFutureDateKey(dateKey) {
+    return Boolean(dateKey && /^\d{4}-\d{2}-\d{2}$/.test(dateKey) && dateKey > isoDate());
+  }
+
   function markClass(dateKey, classIndex, newSubject, status) {
+    if (isFutureDateKey(dateKey)) {
+      showToast("You can only mark or edit today and previous days, not future dates.", "warning");
+      return;
+    }
+
     const cleanSubject = String(newSubject || "").trim();
     if (!cleanSubject) {
       showToast("Please enter a subject name first.", "warning");
@@ -1644,7 +2230,7 @@
       const oldStatus = state.dailyMarks[dateKey][oldKey];
       revertSlotMark(dateKey, oldKey);
       if (oldSubject === cleanSubject && oldStatus === status) {
-        saveState(state);
+        saveState(state, dateKey);
         renderRollCallWidget();
         renderHome();
         showToast(`Cleared mark for ${cleanSubject}.`, "info");
@@ -1663,7 +2249,7 @@
     }
 
     state.dailyMarks[dateKey][`${classIndex}#${cleanSubject}`] = status;
-    saveState(state);
+    saveState(state, dateKey);
     renderRollCallWidget();
     renderHome();
 
@@ -1674,6 +2260,10 @@
   if (typeof window !== "undefined") {
     window.toggleDayHoliday = function (dateKeyParam) {
       const dateKey = dateKeyParam || selectedRollCallDate || isoDate();
+      if (isFutureDateKey(dateKey)) {
+        showToast("You can only mark holidays for today or previous days, not future dates.", "warning");
+        return;
+      }
       state.dailyMarks[dateKey] = state.dailyMarks[dateKey] || {};
 
       if (!state.dailyMarks[dateKey].isHoliday) {
@@ -1687,35 +2277,132 @@
         showToast(`Holiday removed for ${dateKey}.`, "info");
       }
 
-      saveState(state);
+      saveState(state, dateKey);
       renderRollCallWidget();
       renderHome();
     };
 
     window.setRollCallDate = function (nextDate) {
       if (!nextDate) return;
+      const todayKey = isoDate();
+      if (nextDate > todayKey) {
+        selectedRollCallDate = todayKey;
+        rcCalendarOpen = false;
+        renderRollCallWidget();
+        showToast("Next day / future attendance cannot be edited. Showing Today.", "warning");
+        return;
+      }
       selectedRollCallDate = nextDate;
+      const picked = parseLocalDate(nextDate);
+      rcCalendarYear = picked.getFullYear();
+      rcCalendarMonth = picked.getMonth();
+      rcCalendarOpen = false;
       renderRollCallWidget();
     };
+
+    window.stepRollCallDate = function (deltaDays) {
+      const current = parseLocalDate(selectedRollCallDate || isoDate());
+      const next = new Date(current.getFullYear(), current.getMonth(), current.getDate() + deltaDays);
+      window.setRollCallDate(isoDate(next));
+    };
+
+    window.toggleRollCallCalendar = function () {
+      rcCalendarOpen = !rcCalendarOpen;
+      if (rcCalendarOpen) {
+        const cur = parseLocalDate(selectedRollCallDate || isoDate());
+        rcCalendarYear = cur.getFullYear();
+        rcCalendarMonth = cur.getMonth();
+      }
+      renderRollCallWidget();
+    };
+
+    window.stepRollCallCalMonth = function (delta) {
+      const now = new Date();
+      const maxMonthIdx = now.getFullYear() * 12 + now.getMonth();
+      const targetIdx = rcCalendarYear * 12 + rcCalendarMonth + delta;
+      if (targetIdx > maxMonthIdx) return;
+      rcCalendarYear = Math.floor(targetIdx / 12);
+      rcCalendarMonth = targetIdx % 12;
+      renderRollCallWidget();
+    };
+  }
+
+  function renderRollCallCalendarPanel(selectedDateKey, todayKey) {
+    if (!rcCalendarOpen) return "";
+
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const now = new Date();
+    const isCurrentMonthOrLater = rcCalendarYear * 12 + rcCalendarMonth >= now.getFullYear() * 12 + now.getMonth();
+    const daysInMonth = new Date(rcCalendarYear, rcCalendarMonth + 1, 0).getDate();
+    const firstWeekday = new Date(rcCalendarYear, rcCalendarMonth, 1).getDay();
+
+    const blanks = Array.from({ length: firstWeekday }, () => `<div class="rc-cal-cell empty"></div>`).join("");
+    const dayBtns = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(rcCalendarYear, rcCalendarMonth, d);
+      const dk = isoDate(dt);
+      const isFuture = dk > todayKey;
+      const isSel = dk === selectedDateKey;
+      const isTod = dk === todayKey;
+      const marks = state.dailyMarks[dk];
+      const hasMarks = Boolean(marks && Object.keys(marks).some((k) => k === "isHoliday" ? marks[k] : k.includes("#")));
+
+      dayBtns.push(`
+        <button type="button"
+          class="rc-cal-cell ${isSel ? "selected" : ""} ${isTod ? "today" : ""} ${isFuture ? "future-locked" : ""}"
+          ${isFuture ? "disabled aria-disabled=\"true\" title=\"Future dates cannot be edited\"" : `onclick="setRollCallDate('${dk}')"`}>
+          <span>${d}</span>
+          ${hasMarks ? `<span class="rc-cal-dot" aria-hidden="true"></span>` : ""}
+        </button>
+      `);
+    }
+
+    return `
+      <div id="rc-calendar-panel" class="rc-cal-panel" role="region" aria-label="Pick a past date or today">
+        <div class="rc-cal-head">
+          <button type="button" class="rc-step-btn" onclick="stepRollCallCalMonth(-1)" aria-label="Previous calendar month">‹</button>
+          <span class="rc-cal-title">${monthNames[rcCalendarMonth]} ${rcCalendarYear}</span>
+          <button type="button" class="rc-step-btn" onclick="stepRollCallCalMonth(1)" ${isCurrentMonthOrLater ? "disabled" : ""} aria-label="Next calendar month">›</button>
+        </div>
+        <div class="cal-weekdays">
+          <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+        <div class="rc-cal-grid">
+          ${blanks}${dayBtns.join("")}
+        </div>
+        <p class="helper-text">Tap Today or any previous date to edit attendance. Future dates are locked.</p>
+      </div>
+    `;
   }
 
   function renderRollCallWidget() {
     const host = getEl("rollcall-widget");
     if (!host) return;
 
-    const dateKey = selectedRollCallDate || isoDate();
     const todayKey = isoDate();
+    if (!selectedRollCallDate || isFutureDateKey(selectedRollCallDate)) {
+      selectedRollCallDate = todayKey;
+    }
+    const dateKey = selectedRollCallDate;
     const localDate = parseLocalDate(dateKey);
     const dayIndex = localDate.getDay();
     const dayName = DAY_NAMES[dayIndex];
     const isToday = dateKey === todayKey;
 
+    const calendarPanelHtml = renderRollCallCalendarPanel(dateKey, todayKey);
+
     const dateBar = `
       <div class="rc-toolbar">
         <div class="rc-date-group">
+          <button type="button" class="rc-step-btn" onclick="stepRollCallDate(-1)" title="Edit previous day" aria-label="Previous day">‹ Prev</button>
           <label for="rc-date-picker" class="sr-only">Select date</label>
-          <input type="date" id="rc-date-picker" class="form-input rc-date-input" value="${escapeHtml(dateKey)}" onchange="setRollCallDate(this.value)">
-          <span class="rc-day-label">${dayName}${isToday ? " (Today)" : ""}</span>
+          <input type="date" id="rc-date-picker" class="form-input rc-date-input" max="${todayKey}" value="${escapeHtml(dateKey)}" onchange="setRollCallDate(this.value)">
+          <button type="button" class="rc-step-btn" onclick="stepRollCallDate(1)" ${isToday ? "disabled" : ""} title="${isToday ? "Cannot edit future days" : "Next day"}" aria-label="Next day">Next ›</button>
+          <button type="button" id="rc-cal-toggle-btn" class="rc-step-btn ${rcCalendarOpen ? "active" : ""}" onclick="toggleRollCallCalendar()" aria-expanded="${rcCalendarOpen}">📅 Calendar</button>
+          <span class="rc-day-label">${dayName}${isToday ? " (Today)" : " (Past Day)"}</span>
           ${!isToday ? `<button type="button" class="btn-link" onclick="setRollCallDate('${todayKey}')">Jump to Today</button>` : ""}
         </div>
         ${
@@ -1726,6 +2413,7 @@
               </button>`
         }
       </div>
+      ${calendarPanelHtml}
     `;
 
     if (state.settings.weeklyHolidays.includes(dayIndex)) {
@@ -1993,7 +2681,8 @@
         reader.onload = () => {
           try {
             const parsed = JSON.parse(String(reader.result || ""));
-            state = sanitizeState(parsed);
+            const targetState = parsed?.schema === "bunksmart-phone-db-v1" && parsed?.state ? parsed.state : parsed;
+            state = sanitizeState(targetState);
             saveState(state);
             renderAll();
             showToast("Backup restored successfully!", "success");
@@ -2030,6 +2719,8 @@
         }
       };
     }
+
+    renderPhoneStoragePanel();
   }
 
   /* --- GRADE PREDICTOR (SGPA + FINAL EXAM SCORE) --- */
@@ -3121,6 +3812,308 @@
     });
   }
 
+  /* --- PHONE LOGIN MODAL, PERSISTENCE & MONTHLY FILES UI --- */
+  function renderUserPill() {
+    const label = getEl("user-pill-label");
+    if (!label) return;
+    const user = getActiveUser();
+    label.textContent = user ? `${user.name.split(" ")[0]} · ${user.displayRollNo}` : "Login";
+  }
+
+  function renderSavedUsersList() {
+    const section = getEl("saved-users-section");
+    const listEl = getEl("saved-users-list");
+    if (!section || !listEl) return;
+
+    const users = Object.values(loadUsersRegistry()).sort((a, b) =>
+      String(b.lastLoginAt || "").localeCompare(String(a.lastLoginAt || ""))
+    );
+    if (users.length === 0) {
+      section.classList.add("hidden");
+      listEl.innerHTML = "";
+      return;
+    }
+
+    const activeRoll = getActiveRollNo();
+    section.classList.remove("hidden");
+    listEl.innerHTML = users
+      .map(
+        (u) => `
+      <button type="button" class="saved-user-chip ${u.rollNo === activeRoll ? "active" : ""}" onclick="selectSavedPhoneUser('${escapeHtml(u.rollNo)}')">
+        <div>
+          <strong>${escapeHtml(u.name)}</strong>
+          <div class="saved-user-meta">Roll No: ${escapeHtml(u.displayRollNo)}</div>
+        </div>
+        <span class="pill-muted">${u.rollNo === activeRoll ? "Active" : "Switch"}</span>
+      </button>
+    `
+      )
+      .join("");
+  }
+
+  function openLoginModal(allowClose = Boolean(getActiveUser())) {
+    const backdrop = getEl("login-backdrop");
+    const modal = getEl("login-modal");
+    const closeBtn = getEl("login-close-btn");
+    const nameIn = getEl("login-name");
+    const rollIn = getEl("login-roll");
+    const hint = getEl("login-match-hint");
+    if (!backdrop || !modal) return;
+
+    const activeUser = getActiveUser();
+    if (closeBtn) {
+      closeBtn.classList.toggle("hidden", !allowClose);
+    }
+    if (nameIn && activeUser && !nameIn.value) {
+      nameIn.value = activeUser.name || "";
+    }
+    if (rollIn && activeUser && !rollIn.value) {
+      rollIn.value = activeUser.displayRollNo || "";
+    }
+    if (hint) {
+      hint.textContent = activeUser
+        ? `Currently signed in as ${activeUser.name} (${activeUser.displayRollNo}). Enter another Roll No to add/switch profile.`
+        : "Your Name and Roll Number create an offline profile saved directly in this phone's storage.";
+    }
+
+    renderSavedUsersList();
+    backdrop.classList.remove("hidden");
+    modal.classList.remove("hidden");
+    backdrop.setAttribute("aria-hidden", "false");
+    if (nameIn && typeof nameIn.focus === "function") setTimeout(() => nameIn.focus(), 30);
+  }
+
+  function closeLoginModal() {
+    const backdrop = getEl("login-backdrop");
+    const modal = getEl("login-modal");
+    if (!backdrop || !modal) return;
+    backdrop.classList.add("hidden");
+    modal.classList.add("hidden");
+    backdrop.setAttribute("aria-hidden", "true");
+  }
+
+  async function restorePhoneFolderHandle() {
+    const db = await openPhoneIndexedDB();
+    if (!db) return;
+    const activeRoll = getActiveRollNo() || "LOCAL";
+    const rec = (await idbGet(db, "file_handles", `phone_folder_${activeRoll}`)) || (await idbGet(db, "file_handles", "phone_folder_global"));
+    if (rec && rec.handle) {
+      phoneDirectoryHandle = rec.handle;
+      lastFileSyncStatus = `Folder linked: "${rec.handle.name}"`;
+      renderPhoneStoragePanel();
+    }
+  }
+
+  async function requestPersistentPhoneStorage() {
+    if (typeof navigator !== "undefined" && navigator.storage && navigator.storage.persist) {
+      try {
+        phonePersistGranted = await navigator.storage.persist();
+      } catch (e) {
+        phonePersistGranted = false;
+      }
+    }
+  }
+
+  async function linkPhoneFolderForAutoSave() {
+    if (typeof window === "undefined" || typeof window.showDirectoryPicker !== "function") {
+      showToast("Direct folder auto-save is not supported by this browser. Use Save JSON / CSV buttons below.", "info");
+      return;
+    }
+    try {
+      const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+      phoneDirectoryHandle = handle;
+      const db = await openPhoneIndexedDB();
+      const activeRoll = getActiveRollNo() || "LOCAL";
+      if (db) {
+        await idbPut(db, "file_handles", { id: `phone_folder_${activeRoll}`, handle, savedAt: new Date().toISOString() });
+        await idbPut(db, "file_handles", { id: "phone_folder_global", handle, savedAt: new Date().toISOString() });
+      }
+      await syncToPhoneDatabase(state, getActiveUser(), isoDate());
+      showToast(`Linked folder "${handle.name}" — all attendance & monthly files will auto-save there.`, "success");
+    } catch (e) {
+      if (e && e.name !== "AbortError") {
+        showToast("Could not link phone folder.", "error");
+      }
+    }
+  }
+
+  function renderPhoneStoragePanel() {
+    const panel = getEl("phone-storage-panel");
+    const badge = getEl("phone-db-badge");
+    if (!panel) return;
+
+    const user = getActiveUser();
+    const months = getAvailableMonthKeys(state);
+    const dailyCount = Object.keys(state.dailyMarks || {}).length;
+    const autoDownloadOn = getAutoDownloadEnabled();
+    const supportsDirPicker = typeof window !== "undefined" && typeof window.showDirectoryPicker === "function";
+
+    if (badge) {
+      badge.textContent = phoneDirectoryHandle ? `Folder: ${phoneDirectoryHandle.name}` : "Phone DB Active";
+    }
+
+    const monthlyRowsHtml = months
+      .map((mk) => {
+        const rep = buildMonthlyAttendanceReport(state, mk, user);
+        const pctText = rep.overall.monthlyPct === null ? "No marks yet" : `${rep.overall.monthlyPct}% (${rep.overall.present}/${rep.overall.held})`;
+        return `
+          <div class="monthly-file-row">
+            <div>
+              <strong>${escapeHtml(rep.monthLabel)} (${escapeHtml(mk)})</strong>
+              <div class="saved-user-meta">${rep.totalDaysMarked} day(s) logged • ${escapeHtml(pctText)}</div>
+            </div>
+            <div class="monthly-file-actions">
+              <button type="button" class="btn-mini" onclick="downloadMonthFile('${escapeHtml(mk)}', 'json')">⬇ Month JSON</button>
+              <button type="button" class="btn-mini" onclick="downloadMonthFile('${escapeHtml(mk)}', 'csv')">⬇ Month CSV</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    panel.innerHTML = `
+      <div class="phone-db-grid">
+        <div class="phone-db-stat">
+          <div class="phone-db-stat-lbl">Logged Student</div>
+          <div class="phone-db-stat-val">${user ? `${escapeHtml(user.name)} (${escapeHtml(user.displayRollNo)})` : "Not signed in"}</div>
+        </div>
+        <div class="phone-db-stat">
+          <div class="phone-db-stat-lbl">Phone Database Set</div>
+          <div class="phone-db-stat-val">${dailyCount} Daily Logs · ${months.length} Monthly Archives</div>
+        </div>
+        <div class="phone-db-stat">
+          <div class="phone-db-stat-lbl">Sync Status</div>
+          <div class="phone-db-stat-val">${escapeHtml(lastFileSyncStatus)}${phonePersistGranted ? " (Persistent)" : ""}</div>
+        </div>
+      </div>
+
+      <div class="data-actions" style="margin-bottom: 12px;">
+        ${
+          supportsDirPicker
+            ? `<button type="button" id="link-phone-folder-btn" class="btn-primary">📁 ${phoneDirectoryHandle ? "Change Linked Phone Folder" : "Link Phone Folder (Auto-Save Files)"}</button>`
+            : ""
+        }
+        <button type="button" id="download-full-db-btn" class="btn-secondary">💾 Save Complete Database File to Phone</button>
+        <button type="button" id="switch-user-btn" class="btn-secondary">👤 Switch / Add Student</button>
+      </div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
+        <input type="checkbox" id="auto-download-monthly-chk" ${autoDownloadOn ? "checked" : ""}>
+        <span>Also download updated Monthly Attendance file automatically whenever I mark daily roll call</span>
+      </label>
+
+      <div>
+        <span class="setting-label">Monthly Attendance Files (Auto-Generated Per Month)</span>
+        <div class="monthly-files-list">${monthlyRowsHtml}</div>
+      </div>
+    `;
+
+    const linkBtn = getEl("link-phone-folder-btn");
+    if (linkBtn) linkBtn.onclick = linkPhoneFolderForAutoSave;
+
+    const fullDbBtn = getEl("download-full-db-btn");
+    if (fullDbBtn) {
+      fullDbBtn.onclick = () => {
+        const payload = buildCompletePhoneDatabasePayload(state, getActiveUser());
+        const rollSlug = (getActiveUser()?.rollNo || "student").toLowerCase();
+        downloadTextFile(`bunksmart-${rollSlug}-database-${isoDate()}.json`, JSON.stringify(payload, null, 2), "application/json");
+        showToast("Complete phone database file saved!", "success");
+      };
+    }
+
+    const switchBtn = getEl("switch-user-btn");
+    if (switchBtn) switchBtn.onclick = () => openLoginModal(true);
+
+    const autoChk = getEl("auto-download-monthly-chk");
+    if (autoChk) {
+      autoChk.onchange = () => {
+        setAutoDownloadEnabled(autoChk.checked);
+        showToast(
+          autoChk.checked ? "Auto-download on daily save enabled." : "Auto-download on daily save disabled.",
+          "info"
+        );
+      };
+    }
+  }
+
+  function initStudentLogin() {
+    const profileBtn = getEl("user-profile-btn");
+    const closeBtn = getEl("login-close-btn");
+    const backdrop = getEl("login-backdrop");
+    const form = getEl("login-form");
+    const nameIn = getEl("login-name");
+    const rollIn = getEl("login-roll");
+    const hint = getEl("login-match-hint");
+
+    if (profileBtn) profileBtn.addEventListener("click", () => openLoginModal(Boolean(getActiveUser())));
+    if (closeBtn) closeBtn.addEventListener("click", closeLoginModal);
+    if (backdrop) backdrop.addEventListener("click", () => {
+      if (getActiveUser()) closeLoginModal();
+    });
+
+    if (rollIn && hint) {
+      rollIn.addEventListener("input", () => {
+        const rn = normalizeRollNo(rollIn.value);
+        const existing = rn ? loadUsersRegistry()[rn] : null;
+        if (existing) {
+          hint.textContent = `Existing profile found on this phone: ${existing.name} (${existing.displayRollNo}) — will load your saved data.`;
+          if (nameIn && !nameIn.value.trim()) nameIn.value = existing.name;
+        } else if (rn) {
+          hint.textContent = "New profile — will be created & saved in your phone storage.";
+        } else {
+          hint.textContent = "";
+        }
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const res = loginOrRegisterUser(nameIn ? nameIn.value : "", rollIn ? rollIn.value : "");
+        if (res.error) {
+          showToast(res.error, "warning");
+          return;
+        }
+        closeLoginModal();
+        renderAll();
+        restorePhoneFolderHandle();
+        showToast(
+          res.isNew
+            ? `Profile saved on phone for ${res.user.name} (${res.user.displayRollNo}).`
+            : `Welcome back, ${res.user.name} (${res.user.displayRollNo})!`,
+          "success"
+        );
+      });
+    }
+
+    if (typeof window !== "undefined") {
+      window.selectSavedPhoneUser = function (rollNo) {
+        const reg = loadUsersRegistry();
+        const target = reg[normalizeRollNo(rollNo)];
+        if (!target) return;
+        const res = loginOrRegisterUser(target.name, target.displayRollNo);
+        if (!res.error) {
+          closeLoginModal();
+          renderAll();
+          restorePhoneFolderHandle();
+          showToast(`Switched to ${res.user.name} (${res.user.displayRollNo}).`, "success");
+        }
+      };
+
+      window.downloadMonthFile = function (monthKey, format) {
+        const activeUser = getActiveUser();
+        const report = buildMonthlyAttendanceReport(state, monthKey, activeUser);
+        const rollSlug = (activeUser?.rollNo || "student").toLowerCase();
+        if (format === "csv") {
+          downloadTextFile(`bunksmart-${rollSlug}-month-${monthKey}.csv`, buildMonthlyAttendanceCsv(report), "text/csv;charset=utf-8");
+        } else {
+          downloadTextFile(`bunksmart-${rollSlug}-month-${monthKey}.json`, JSON.stringify(report, null, 2), "application/json");
+        }
+        showToast(`Saved ${monthKey} attendance (${format.toUpperCase()}) to phone files.`, "success");
+      };
+    }
+  }
+
   const publicApi = {
     getPercentage,
     getBunkAnalysis,
@@ -3131,7 +4124,14 @@
     matchSubjectsInQuery,
     extractQueryParameters,
     classifyQueryIntents,
-    runAlgorithmicBoardQuery
+    runAlgorithmicBoardQuery,
+    normalizeRollNo,
+    loginOrRegisterUser,
+    getActiveUser,
+    getAvailableMonthKeys,
+    buildMonthlyAttendanceReport,
+    buildMonthlyAttendanceCsv,
+    buildCompletePhoneDatabasePayload
   };
 
   if (typeof window !== "undefined") {
@@ -3142,6 +4142,7 @@
   }
 
   function renderAll() {
+    renderUserPill();
     renderHome();
     renderRollCallWidget();
     renderSettings();
@@ -3161,7 +4162,17 @@
     initGuideBanner();
     initQuickAddSubject();
     initChatAssistant();
+    initStudentLogin();
+    requestPersistentPhoneStorage();
     renderAll();
+
+    const activeUser = getActiveUser();
+    if (!activeUser) {
+      openLoginModal(false);
+    } else {
+      restorePhoneFolderHandle();
+      syncToPhoneDatabase(state, activeUser);
+    }
   }
 
   if (typeof document !== "undefined") {

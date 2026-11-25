@@ -32,6 +32,10 @@
       </nav>
 
       <div class="topbar-actions">
+        <button type="button" id="user-profile-btn" class="user-pill-btn" aria-label="Student profile and login" title="Switch or view student profile">
+          <span aria-hidden="true">👤</span>
+          <span id="user-pill-label" class="user-pill-text">Login</span>
+        </button>
         <button type="button" id="chat-open-btn" class="ask-pill-btn" aria-label="Open BunkSmart Assistant" title="Ask BunkSmart Assistant">
           <span aria-hidden="true">💬</span>
           <span class="ask-pill-text">Ask AI</span>
@@ -283,6 +287,15 @@
           <button type="button" id="save-timetable" class="btn-primary" style="width: 100%;">Save Timetable</button>
         </div>
       </div>
+
+      <!-- Phone Storage, Database & Monthly Files -->
+      <div class="card" id="phone-storage-card" style="margin-top: 16px;">
+        <div class="card-head">
+          <h3 class="card-title">Phone Storage, Database &amp; Monthly Files</h3>
+          <span id="phone-db-badge" class="pill-muted">Phone DB Active</span>
+        </div>
+        <div id="phone-storage-panel"></div>
+      </div>
     </section>
   </main>
 
@@ -343,6 +356,39 @@
   <div id="full-graph-backdrop" class="full-graph-backdrop hidden" aria-hidden="true"></div>
   <section id="full-graph-modal" class="full-graph-modal hidden" role="dialog" aria-modal="true" aria-labelledby="full-graph-title">
     <div id="full-graph-content" class="full-graph-content"></div>
+  </section>
+
+  <!-- Student Phone-Local Login Modal -->
+  <div id="login-backdrop" class="login-backdrop hidden" aria-hidden="true"></div>
+  <section id="login-modal" class="login-modal hidden" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
+    <div class="login-card">
+      <div class="login-head">
+        <div class="brand-logo" aria-hidden="true">BS</div>
+        <div style="flex:1;min-width:0;">
+          <h2 id="login-modal-title" class="login-title">Student Login</h2>
+          <p class="login-subtitle">Saved on your phone storage only — enter Name &amp; Roll Number.</p>
+        </div>
+        <button type="button" id="login-close-btn" class="icon-btn hidden" aria-label="Close login">✕</button>
+      </div>
+
+      <form id="login-form" class="login-form">
+        <div class="setting-block" style="margin-bottom: 12px;">
+          <label for="login-name" class="setting-label">Student Name</label>
+          <input type="text" id="login-name" class="form-input" placeholder="e.g. Ajay Yadav" autocomplete="name" required>
+        </div>
+        <div class="setting-block" style="margin-bottom: 10px;">
+          <label for="login-roll" class="setting-label">Roll Number / USN</label>
+          <input type="text" id="login-roll" class="form-input" placeholder="e.g. 1EW24CS001" autocomplete="username" required>
+        </div>
+        <p id="login-match-hint" class="helper-text" style="margin-bottom: 12px;"></p>
+        <button type="submit" id="login-submit-btn" class="btn-primary" style="width: 100%;">Login &amp; Save on Phone</button>
+      </form>
+
+      <div id="saved-users-section" class="saved-users-section hidden">
+        <span class="setting-label" style="margin-top: 16px;">Saved Profiles on This Phone</span>
+        <div id="saved-users-list" class="saved-users-list"></div>
+      </div>
+    </div>
   </section>
 
   <!-- Toast Notification -->

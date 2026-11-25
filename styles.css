@@ -880,6 +880,115 @@ body {
   width: auto;
 }
 
+.rc-step-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text);
+  min-height: 38px;
+  padding: 6px 11px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.rc-step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rc-step-btn.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.rc-cal-panel {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.rc-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.rc-cal-title {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.rc-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.rc-cal-cell {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 9px;
+  min-height: 38px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 2px;
+}
+
+.rc-cal-cell:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.rc-cal-cell.empty {
+  border-color: transparent;
+  background: transparent;
+  cursor: default;
+}
+
+.rc-cal-cell.selected {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.rc-cal-cell.today:not(.selected) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.rc-cal-cell.future-locked,
+.rc-cal-cell:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: var(--surface-soft);
+}
+
+.rc-cal-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--success);
+}
+
+.rc-cal-cell.selected .rc-cal-dot {
+  background: #fff;
+}
+
 .rc-day-label {
   font-weight: 700;
   font-size: 14px;
@@ -2025,4 +2134,196 @@ body {
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
+}
+
+/* Student Login Pill & Phone-Local Login Modal */
+.user-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  max-width: 170px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.user-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 440px) {
+  .user-pill-btn {
+    max-width: 112px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+}
+
+.login-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(4px);
+}
+
+.login-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.login-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.login-subtitle {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.saved-users-section {
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+}
+
+.saved-users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.saved-user-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.saved-user-chip:hover,
+.saved-user-chip.active {
+  border-color: var(--primary);
+}
+
+.saved-user-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Phone Storage & Monthly Files Panel */
+.phone-db-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.phone-db-stat {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.phone-db-stat-lbl {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.phone-db-stat-val {
+  font-size: 15px;
+  font-weight: 800;
+  margin-top: 3px;
+  word-break: break-word;
+}
+
+.monthly-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.monthly-file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.monthly-file-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-mini {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-mini:hover {
+  border-color: var(--primary);
 }
