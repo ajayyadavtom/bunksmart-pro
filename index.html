@@ -32,6 +32,10 @@
       </nav>
 
       <div class="topbar-actions">
+        <button type="button" id="chat-open-btn" class="ask-pill-btn" aria-label="Open BunkSmart Assistant" title="Ask BunkSmart Assistant">
+          <span aria-hidden="true">💬</span>
+          <span class="ask-pill-text">Ask AI</span>
+        </button>
         <button type="button" id="theme-toggle" class="icon-btn" aria-label="Toggle dark mode">
           <span id="theme-icon-dark">🌙</span>
           <span id="theme-icon-light" class="hidden">☀️</span>
@@ -52,19 +56,26 @@
       <button type="button" class="nav-item" data-view="rollcall" onclick="switchView('rollcall')">✅ Daily Roll Call</button>
       <button type="button" class="nav-item" data-view="predictor" onclick="switchView('predictor')">🎓 Grade Predictor</button>
       <button type="button" class="nav-item" data-view="settings" onclick="switchView('settings')">⚙️ Setup &amp; Timetable</button>
+      <button type="button" id="sidebar-chat-btn" class="nav-item">💬 Ask Assistant</button>
     </nav>
     <p class="helper-text">All your data stays privately saved in this browser—no account needed.</p>
   </aside>
 
   <main class="app-container">
     <!-- Friendly Quick-Start Guide -->
-    <div class="guide-banner">
-      <div class="guide-steps">
-        <span><strong>1.</strong> Set your weekly classes in <button type="button" class="btn-link" onclick="switchView('settings')">Setup &amp; Timetable</button></span>
-        <span><strong>2.</strong> Mark classes daily in <button type="button" class="btn-link" onclick="switchView('rollcall')">Daily Roll Call</button></span>
-        <span><strong>3.</strong> Check how many classes you can safely skip below!</span>
+    <div class="guide-banner" id="guide-banner">
+      <div class="guide-top-row">
+        <button type="button" id="guide-toggle-btn" class="guide-toggle-btn" aria-expanded="true">
+          <span><strong>Quick Guide:</strong> 3 easy steps to track attendance</span>
+          <span id="guide-chevron" aria-hidden="true">▾</span>
+        </button>
+        <span id="home-target-badge" class="pill-muted">Target: 75%</span>
       </div>
-      <span id="home-target-badge" class="pill-muted">Target: 75%</span>
+      <div class="guide-steps" id="guide-steps-wrap">
+        <span><em class="step-num">1</em> Set classes in <button type="button" class="btn-link" onclick="switchView('settings')">Setup &amp; Timetable</button></span>
+        <span><em class="step-num">2</em> Mark daily in <button type="button" class="btn-link" onclick="switchView('rollcall')">Daily Roll Call</button></span>
+        <span><em class="step-num">3</em> Check your safe-skip buffer below</span>
+      </div>
     </div>
 
     <!-- VIEW 1: HOME DASHBOARD -->
@@ -290,6 +301,43 @@
       <span>⚙️</span><span>Setup</span>
     </button>
   </nav>
+
+  <!-- ChatGPT-Style Side Assistant Drawer (Hidden until clicked) -->
+  <div id="chat-backdrop" class="chat-backdrop hidden" aria-hidden="true"></div>
+  <aside id="chat-drawer" class="chat-drawer hidden" role="dialog" aria-modal="true" aria-labelledby="chat-drawer-title">
+    <div class="chat-header">
+      <div class="chat-title-wrap">
+        <div class="chat-avatar" aria-hidden="true">✦</div>
+        <div>
+          <h2 id="chat-drawer-title" class="chat-title">BunkSmart Assistant</h2>
+          <p class="chat-subtitle">Instant answers from your attendance data</p>
+        </div>
+      </div>
+      <div class="chat-header-actions">
+        <button type="button" id="chat-clear-btn" class="chat-icon-action" title="New chat" aria-label="New chat">↺</button>
+        <button type="button" id="chat-close-btn" class="chat-icon-action" title="Close assistant" aria-label="Close assistant">✕</button>
+      </div>
+    </div>
+
+    <div class="chat-mode-bar" role="tablist" aria-label="Assistant mode">
+      <button type="button" id="chat-tab-chat" class="chat-mode-tab active" role="tab" aria-selected="true">💬 Chat</button>
+      <button type="button" id="chat-tab-charts" class="chat-mode-tab" role="tab" aria-selected="false">📈 Charts &amp; Table</button>
+    </div>
+
+    <!-- Chat Tab Panel -->
+    <div id="chat-panel-chat" class="chat-panel active">
+      <div id="chat-messages" class="chat-messages"></div>
+      <form id="chat-form" class="chat-composer">
+        <input type="text" id="chat-input" class="chat-input" placeholder="Ask about bunks, %, or today's classes..." autocomplete="off" aria-label="Ask BunkSmart Assistant">
+        <button type="submit" id="chat-send-btn" class="chat-send-btn" aria-label="Send message">↑</button>
+      </form>
+    </div>
+
+    <!-- Charts & Breakdown Tab Panel -->
+    <div id="chat-panel-charts" class="chat-panel">
+      <div id="chat-charts-body" class="chat-charts-body"></div>
+    </div>
+  </aside>
 
   <!-- Toast Notification -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

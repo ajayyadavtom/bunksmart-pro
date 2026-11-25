@@ -1,10 +1,10 @@
 {
-  "name": "bunksmart-pro-workspace",
+  "name": "bunksmart-pro",
   "version": "1.0.0",
   "description": "BunkSmart Pro — Mobile-friendly attendance and grade planner",
   "private": true,
   "scripts": {
-    "dev": "node bunksmart-pro-main/server.js",
-    "start": "node bunksmart-pro-main/server.js"
+    "dev": "node server.js",
+    "start": "node server.js"
   }
 }

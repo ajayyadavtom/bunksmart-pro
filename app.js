@@ -523,55 +523,57 @@
     return clean;
   }
 
-  window.openEditSubject = function (encodedSub) {
-    const sub = decodeURIComponent(encodedSub);
-    if (!state.attendance[sub]) return;
-    editingSubject = editingSubject === sub ? null : sub;
-    renderHome();
-  };
+  if (typeof window !== "undefined") {
+    window.openEditSubject = function (encodedSub) {
+      const sub = decodeURIComponent(encodedSub);
+      if (!state.attendance[sub]) return;
+      editingSubject = editingSubject === sub ? null : sub;
+      renderHome();
+    };
 
-  window.cancelEditSubject = function () {
-    editingSubject = null;
-    renderHome();
-  };
+    window.cancelEditSubject = function () {
+      editingSubject = null;
+      renderHome();
+    };
 
-  window.saveEditSubject = function (encodedSub) {
-    const sub = decodeURIComponent(encodedSub);
-    if (!state.attendance[sub]) return;
-    const attIn = getEl("edit-sub-attended");
-    const totIn = getEl("edit-sub-total");
+    window.saveEditSubject = function (encodedSub) {
+      const sub = decodeURIComponent(encodedSub);
+      if (!state.attendance[sub]) return;
+      const attIn = getEl("edit-sub-attended");
+      const totIn = getEl("edit-sub-total");
 
-    const nextAttended = Math.floor(Number(attIn?.value));
-    const nextTotal = Math.floor(Number(totIn?.value));
+      const nextAttended = Math.floor(Number(attIn?.value));
+      const nextTotal = Math.floor(Number(totIn?.value));
 
-    if (!Number.isFinite(nextAttended) || !Number.isFinite(nextTotal) || nextAttended < 0 || nextTotal < 0) {
-      showToast("Please enter valid non-negative numbers.", "error");
-      return;
-    }
-    if (nextAttended > nextTotal) {
-      showToast("Attended classes cannot exceed total held classes.", "error");
-      return;
-    }
+      if (!Number.isFinite(nextAttended) || !Number.isFinite(nextTotal) || nextAttended < 0 || nextTotal < 0) {
+        showToast("Please enter valid non-negative numbers.", "error");
+        return;
+      }
+      if (nextAttended > nextTotal) {
+        showToast("Attended classes cannot exceed total held classes.", "error");
+        return;
+      }
 
-    state.attendance[sub].attended = nextAttended;
-    state.attendance[sub].total = nextTotal;
-    editingSubject = null;
-    saveState(state);
-    renderHome();
-    showToast(`Updated ${sub} to ${nextAttended}/${nextTotal}.`, "success");
-  };
+      state.attendance[sub].attended = nextAttended;
+      state.attendance[sub].total = nextTotal;
+      editingSubject = null;
+      saveState(state);
+      renderHome();
+      showToast(`Updated ${sub} to ${nextAttended}/${nextTotal}.`, "success");
+    };
 
-  window.deleteSubject = function (encodedSub) {
-    const sub = decodeURIComponent(encodedSub);
-    if (!state.attendance[sub]) return;
-    if (!confirm(`Remove "${sub}" from your attendance tracker?`)) return;
+    window.deleteSubject = function (encodedSub) {
+      const sub = decodeURIComponent(encodedSub);
+      if (!state.attendance[sub]) return;
+      if (!confirm(`Remove "${sub}" from your attendance tracker?`)) return;
 
-    delete state.attendance[sub];
-    saveState(state);
-    renderHome();
-    renderRollCallWidget();
-    showToast(`Removed "${sub}".`, "info");
-  };
+      delete state.attendance[sub];
+      saveState(state);
+      renderHome();
+      renderRollCallWidget();
+      showToast(`Removed "${sub}".`, "info");
+    };
+  }
 
   /* --- RENDER HOME DASHBOARD --- */
   function renderHome() {
@@ -642,6 +644,7 @@
 
             const p = getPercentage(d.attended, d.total);
             const pStr = p === null ? "--%" : Math.round(p) + "%";
+            const fillWidth = p === null ? 0 : Math.min(100, Math.max(0, p));
             const analysis = getBunkAnalysis(d.attended, d.total, targetPct);
             const enc = encodeURIComponent(sub);
             const isEditing = editingSubject === sub;
@@ -655,6 +658,9 @@
                   </div>
                   <div class="subject-advice advice-${analysis.status}" title="${escapeHtml(analysis.detailText)}">
                     ${escapeHtml(analysis.shortText)}
+                  </div>
+                  <div class="subject-progress-track" aria-hidden="true">
+                    <div class="subject-progress-fill fill-${analysis.status}" style="width: ${fillWidth.toFixed(1)}%"></div>
                   </div>
                 </div>
                 <div class="subject-actions">
@@ -707,8 +713,6 @@
           ? `<strong>Getting started:</strong> Mark classes in <em>Daily Roll Call</em> to see how many classes you can safely skip.`
           : `<strong>Overall (${totalAttended}/${totalHeld}, burned ${overallAnalysis.burned}):</strong> ${escapeHtml(overallAnalysis.detailText)}`;
     }
-
-    renderAiBoard();
   }
 
   function initQuickAddSubject() {
@@ -813,31 +817,33 @@
     showToast(`Marked ${cleanSubject} as ${labels[status] || status}.`, "success");
   }
 
-  window.toggleDayHoliday = function (dateKeyParam) {
-    const dateKey = dateKeyParam || selectedRollCallDate || isoDate();
-    state.dailyMarks[dateKey] = state.dailyMarks[dateKey] || {};
+  if (typeof window !== "undefined") {
+    window.toggleDayHoliday = function (dateKeyParam) {
+      const dateKey = dateKeyParam || selectedRollCallDate || isoDate();
+      state.dailyMarks[dateKey] = state.dailyMarks[dateKey] || {};
 
-    if (!state.dailyMarks[dateKey].isHoliday) {
-      Object.keys(state.dailyMarks[dateKey]).forEach((k) => {
-        if (k !== "isHoliday") revertSlotMark(dateKey, k);
-      });
-      state.dailyMarks[dateKey].isHoliday = true;
-      showToast(`Marked ${dateKey} as a holiday.`, "info");
-    } else {
-      state.dailyMarks[dateKey].isHoliday = false;
-      showToast(`Holiday removed for ${dateKey}.`, "info");
-    }
+      if (!state.dailyMarks[dateKey].isHoliday) {
+        Object.keys(state.dailyMarks[dateKey]).forEach((k) => {
+          if (k !== "isHoliday") revertSlotMark(dateKey, k);
+        });
+        state.dailyMarks[dateKey].isHoliday = true;
+        showToast(`Marked ${dateKey} as a holiday.`, "info");
+      } else {
+        state.dailyMarks[dateKey].isHoliday = false;
+        showToast(`Holiday removed for ${dateKey}.`, "info");
+      }
 
-    saveState(state);
-    renderRollCallWidget();
-    renderHome();
-  };
+      saveState(state);
+      renderRollCallWidget();
+      renderHome();
+    };
 
-  window.setRollCallDate = function (nextDate) {
-    if (!nextDate) return;
-    selectedRollCallDate = nextDate;
-    renderRollCallWidget();
-  };
+    window.setRollCallDate = function (nextDate) {
+      if (!nextDate) return;
+      selectedRollCallDate = nextDate;
+      renderRollCallWidget();
+    };
+  }
 
   function renderRollCallWidget() {
     const host = getEl("rollcall-widget");
@@ -1339,10 +1345,17 @@
     return dp[n];
   }
 
+  const QUERY_STOP_WORDS = new Set([
+    "a", "an", "and", "are", "as", "at", "be", "by", "can", "could", "do",
+    "for", "go", "have", "helo", "hello", "hey", "hi", "how", "i", "if",
+    "in", "is", "it", "many", "may", "me", "much", "my", "no", "of", "on",
+    "or", "our", "so", "the", "to", "up", "us", "we", "what", "will", "you"
+  ]);
+
   function matchSubjectsInQuery(query, subjectNames) {
     const normQuery = normalizeQueryText(query);
     if (!normQuery || !Array.isArray(subjectNames) || subjectNames.length === 0) return [];
-    const tokens = normQuery.split(" ").filter(Boolean);
+    const tokens = normQuery.split(" ").filter((t) => t && !QUERY_STOP_WORDS.has(t));
     const scored = [];
 
     subjectNames.forEach((name) => {
@@ -1368,7 +1381,7 @@
           if (normSub.length >= 3) {
             const maxLen = Math.max(tok.length, normSub.length);
             const sim = 1 - levenshteinDistance(tok, normSub) / maxLen;
-            if (sim >= 0.65) {
+            if (sim >= 0.72) {
               bestScore = Math.max(bestScore, sim);
             }
           }
@@ -1376,14 +1389,14 @@
           if (i + 1 < tokens.length && normSub.length >= 4) {
             const bigram = `${tok} ${tokens[i + 1]}`;
             const bgSim = 1 - levenshteinDistance(bigram, normSub) / Math.max(bigram.length, normSub.length);
-            if (bgSim >= 0.7) {
+            if (bgSim >= 0.72) {
               bestScore = Math.max(bestScore, bgSim);
             }
           }
         }
       }
 
-      if (bestScore >= 0.65) {
+      if (bestScore >= 0.72) {
         scored.push({ name, score: bestScore });
       }
     });
@@ -1437,38 +1450,43 @@
     return { count, whatIfAction, dayIndex, perSubjectExplicit };
   }
 
-  function classifyQueryIntents(query, params) {
+  function classifyQueryIntents(query, params, matchedSubjects = []) {
     const norm = normalizeQueryText(query);
     const rules = {
+      GREETING: [
+        [/^(hi+|hey+|heyy+|hii+|hello+|helo|hlo|hola|namaste|yo+|sup|greetings|good\s*(morning|afternoon|evening|night)|how\s*(are|r)\s*(you|u)|what\s*can\s*(you|u)\s*do|who\s*are\s*you|help(\s*me)?)$/, 6],
+        [/\b(hi|hey|hello|helo|hlo|hola|namaste|good\s*(morning|afternoon|evening)|how\s*(are|r)\s*(you|u)|what\s*can\s*(you|u)\s*do)\b/, 4]
+      ],
       BURNED: [
-        [/\b(burn|burned|burnt|bunked|missed|skipped|absent)\b/, 3],
-        [/\bhow many\b.*\b(burn|burned|burnt|bunked|missed|skipped)\b/, 4]
+        [/\b(burn|burned|burnt|bunked|missed|skipped|absent)\b/, 4],
+        [/\bhow\s+many\b.*\b(burn|burned|burnt|bunked|missed|skipped)\b/, 5]
       ],
       CAN_BUNK: [
-        [/\b(can i bunk|can i skip|can i miss|safe to bunk|safe to skip|bunkable|left to bunk|buffer|allowance)\b/, 4],
-        [/\bhow many\b.*\b(can i|could i|may i|able to)\s+(bunk|skip|miss)\b/, 5],
-        [/\bhow many\b.*\b(have to bunk|to bunk)\b/, 4]
+        [/\b(can|could|may)\s+(i|we)\s+(bunk|skip|miss|leave)\b/, 5],
+        [/\bhow\s+many\b.*\b(bunk|skip|miss|leave)\b/, 5],
+        [/\b(safe\s+to\s+bunk|safe\s+to\s+skip|bunkable|left\s+to\s+bunk|bunks?\s+left|skips?\s+left|buffer|allowance)\b/, 4],
+        [/\b(bunk|skip)\s+(in|for)\b/, 4]
       ],
       MUST_ATTEND: [
-        [/\b(must attend|need to attend|have to attend|recover|recovery|shortage|deficit|required)\b/, 4],
-        [/\bhow many\b.*\b(have to|need to|must)\s+(attend|cover|go)\b/, 5],
-        [/\bhow many\b.*\b(have to bunk)\b/, 2]
+        [/\b(must\s+attend|need\s+to\s+attend|have\s+to\s+attend|classes\s+needed|recover|recovery|shortage|deficit|required)\b/, 4],
+        [/\bhow\s+many\b.*\b(have\s+to|need\s+to|must)\s+(attend|cover|go)\b/, 5]
       ],
       PERCENTAGE: [
-        [/\b(percent|percentage|pct|ratio|attendance rate|my attendance)\b/, 4],
-        [/\bwhat\s*(is|s)?\s*(my|the|current)?\s*(overall\s*)?attendance\b/, 4]
+        [/\b(percent|percentage|pct|ratio|attendance\s+rate)\b/, 5],
+        [/\b(what|how\s+much|check|show|tell|give)\b.*\battendance\b/, 5],
+        [/\battendance\b/, 4]
       ],
       WHAT_IF: [
-        [/\b(what if|suppose|simulate|if i)\b/, 4]
+        [/\b(what\s+if|suppose|simulate|if\s+i)\b/, 5]
       ],
       TIMETABLE_DAY: [
-        [/\b(today|tomorrow|schedule|timetable)\b/, 3]
+        [/\b(today|tomorrow|schedule|timetable)\b/, 4]
       ],
       SEMESTER_HORIZON: [
-        [/\b(semester|end date|horizon|total budget|final percentage|max achievable)\b/, 4]
+        [/\b(semester|end\s+date|horizon|total\s+budget|final\s+percentage|max\s+achievable)\b/, 4]
       ],
       SUMMARY: [
-        [/\b(summary|overview|report|status|all|everything|chart|board|help)\b/, 3]
+        [/\b(summary|overview|report|all\s+subjects|everything|overall\s+status|full\s+status)\b/, 4]
       ]
     };
 
@@ -1488,11 +1506,33 @@
       scores.TIMETABLE_DAY += 4;
     }
 
-    const active = Object.keys(scores).filter((k) => scores[k] >= 3);
-    if (active.length === 0) {
-      active.push("SUMMARY");
+    const domainIntents = [
+      "BURNED",
+      "CAN_BUNK",
+      "MUST_ATTEND",
+      "PERCENTAGE",
+      "WHAT_IF",
+      "TIMETABLE_DAY",
+      "SEMESTER_HORIZON",
+      "SUMMARY"
+    ];
+
+    const activeDomain = domainIntents.filter((k) => scores[k] >= 3);
+
+    let active = [];
+    if (activeDomain.length > 0) {
+      // User asked an actual attendance question (even if prefixed with "Hi, ...")
+      active = activeDomain;
+    } else if (matchedSubjects.length > 0) {
+      // User named a subject directly (e.g. "English" or "check Maths")
+      active = ["SUBJECT_OVERVIEW"];
+    } else if (scores.GREETING >= 4) {
+      active = ["GREETING"];
+    } else {
+      active = ["UNKNOWN"];
     }
-    active.sort((a, b) => scores[b] - scores[a]);
+
+    active.sort((a, b) => (scores[b] || 0) - (scores[a] || 0));
     return { active, scores };
   }
 
@@ -1514,49 +1554,140 @@
     return "0 bunks left (right on target)";
   }
 
+  function buildSuggestedQuestions(subjectNames, focusSubject) {
+    const sub1 = focusSubject || subjectNames[0] || "Maths";
+    const sub2 = subjectNames.find((s) => s !== sub1) || sub1;
+    if (focusSubject) {
+      return [
+        `What is my attendance in ${sub1}?`,
+        `How many classes can I bunk in ${sub1}?`,
+        `What if I bunk 2 in ${sub1}?`,
+        "Show overall summary"
+      ];
+    }
+    return [
+      `What is my attendance in ${sub1}?`,
+      `How many classes can I bunk in ${sub2}?`,
+      "How many classes have I burned?",
+      "Can I bunk today?",
+      "Show overall summary"
+    ];
+  }
+
   /**
-   * Pure algorithmic query solver for the AI Chart & Query Board.
-   * Answers burned, safe bunks, attendance %, per-subject breakdown, what-if, and schedule queries.
+   * Pure algorithmic query solver for the BunkSmart Assistant.
+   * Pattern-matches greetings, subject-specific questions, percentages, safe bunks, missed classes, what-ifs, and schedules.
    */
   function runAlgorithmicBoardQuery(query, currentState = state, refDate = new Date()) {
     const metrics = computeAllMetrics(currentState, refDate);
     const subjectNames = metrics.subjects.map((s) => s.subject);
     const matchedNames = matchSubjectsInQuery(query, subjectNames);
     const params = extractQueryParameters(query, refDate);
-    const { active: intents, scores } = classifyQueryIntents(query, params);
+    const { active: intents, scores } = classifyQueryIntents(query, params, matchedNames);
 
+    const blocks = [];
+    const ov = metrics.overall;
     const targetSubjects =
       matchedNames.length > 0
         ? metrics.subjects.filter((s) => matchedNames.includes(s.subject))
         : metrics.subjects;
 
-    const blocks = [];
-    const ov = metrics.overall;
     const isSingleSubject = matchedNames.length === 1 && !params.perSubjectExplicit;
     const focus = isSingleSubject ? targetSubjects[0] : ov;
     const focusLabel = isSingleSubject ? focus.subject : "Overall";
 
+    // Handle Greeting or Unrecognized Input gracefully (ask what they want + offer questions!)
+    if (intents.includes("GREETING")) {
+      blocks.push({
+        title: "Assistant",
+        highlight: "Hi! What would you like to check?",
+        detail: "Ask me about a specific subject or pick one of these questions:"
+      });
+      return {
+        query,
+        intents,
+        intentScores: scores,
+        matchedSubjects: matchedNames,
+        metrics,
+        blocks,
+        perSubjectRows: [],
+        quickReplies: buildSuggestedQuestions(subjectNames)
+      };
+    }
+
+    if (intents.includes("UNKNOWN")) {
+      blocks.push({
+        title: "Need a clearer question",
+        highlight: "What would you like to know?",
+        detail:
+          subjectNames.length > 0
+            ? `Try mentioning a subject (like ${subjectNames.slice(0, 3).join(", ")}) and whether you want attendance %, safe bunks, or missed classes — or pick a question below:`
+            : "Add some subjects first, or pick one of the questions below:"
+      });
+      return {
+        query,
+        intents,
+        intentScores: scores,
+        matchedSubjects: matchedNames,
+        metrics,
+        blocks,
+        perSubjectRows: [],
+        quickReplies: buildSuggestedQuestions(subjectNames)
+      };
+    }
+
+    // Subject Overview (when user simply types a subject name like "English")
+    if (intents.includes("SUBJECT_OVERVIEW") && isSingleSubject) {
+      const pctText = formatPct(focus.percentage);
+      const statusNote =
+        focus.total === 0
+          ? `No classes recorded for ${focus.subject} yet.`
+          : focus.canBunk > 0
+            ? `You attended ${focus.attended}/${focus.total} (missed ${focus.burned}) and can safely bunk ${focus.canBunk} more ${focus.canBunk === 1 ? "class" : "classes"}.`
+            : focus.mustAttend > 0 && Number.isFinite(focus.mustAttend)
+              ? `You attended ${focus.attended}/${focus.total} (missed ${focus.burned}). You have 0 bunks left — attend the next ${focus.mustAttend} in a row to reach ${metrics.targetPct}%.`
+              : `You attended ${focus.attended}/${focus.total} (missed ${focus.burned}), right on your ${metrics.targetPct}% target.`;
+      blocks.push({
+        title: `${focus.subject} Attendance Overview`,
+        highlight: pctText,
+        detail: statusNote
+      });
+      return {
+        query,
+        intents,
+        intentScores: scores,
+        matchedSubjects: matchedNames,
+        metrics,
+        blocks,
+        perSubjectRows: [],
+        quickReplies: buildSuggestedQuestions(subjectNames, focus.subject)
+      };
+    }
+
     // 1. Attendance Percentage Block
     if (intents.includes("PERCENTAGE") || intents.includes("SUMMARY")) {
+      const diffLabel =
+        focus.total === 0
+          ? `No classes recorded for ${focusLabel} yet.`
+          : focus.percentage >= metrics.targetPct
+            ? `You have attended ${focus.attended} out of ${focus.total} classes in ${focusLabel} — above your ${metrics.targetPct}% target.`
+            : `You have attended ${focus.attended} out of ${focus.total} classes in ${focusLabel} — below your ${metrics.targetPct}% target.`;
       blocks.push({
-        title: `${focusLabel} Attendance Percentage`,
+        title: `${focusLabel} Attendance`,
         highlight: formatPct(focus.percentage),
-        detail:
-          focus.total === 0
-            ? `No classes recorded for ${focusLabel} yet.`
-            : `${focus.attended} attended out of ${focus.total} total classes (${formatPct(focus.percentage)} vs ${metrics.targetPct}% target).`
+        detail: diffLabel
       });
     }
 
-    // 2. Burned (Bunked) Classes Block
+    // 2. Burned (Missed) Classes Block
     if (intents.includes("BURNED") || intents.includes("SUMMARY")) {
       blocks.push({
-        title: `${focusLabel} Classes Burned (Missed)`,
+        title: `${focusLabel} Classes Missed`,
         highlight: `${focus.burned} ${focus.burned === 1 ? "class" : "classes"}`,
         detail:
           focus.total === 0
-            ? `0 classes burned so far.`
-            : `Formula B = T - A = ${focus.total} - ${focus.attended} = ${focus.burned} burned (${((focus.burned / focus.total) * 100).toFixed(1)}% missed).`
+            ? `No classes held in ${focusLabel} yet.`
+            : `Out of ${focus.total} held classes in ${focusLabel}, you attended ${focus.attended} and missed ${focus.burned}.`
       });
     }
 
@@ -1564,26 +1695,27 @@
     if (intents.includes("CAN_BUNK") || intents.includes("SUMMARY")) {
       if (focus.total === 0) {
         blocks.push({
-          title: `${focusLabel} Safe Bunks Available`,
+          title: `${focusLabel} Safe Bunks`,
           highlight: "0 classes",
-          detail: "Add or mark classes first to compute your safe bunk buffer."
+          detail: `No classes recorded for ${focusLabel} yet.`
         });
       } else if (focus.canBunk > 0) {
+        const afterPct = ((focus.attended / (focus.total + focus.canBunk)) * 100).toFixed(1);
         blocks.push({
-          title: `${focusLabel} Safe Bunks Available`,
-          highlight: `Can bunk ${focus.canBunk} ${focus.canBunk === 1 ? "class" : "classes"}`,
-          detail: `Formula S = floor((100*${focus.attended} - ${metrics.targetPct}*${focus.total}) / ${metrics.targetPct}) = ${focus.canBunk}. Skipping ${focus.canBunk} keeps attendance at ${((focus.attended / (focus.total + focus.canBunk)) * 100).toFixed(1)}% >= ${metrics.targetPct}%.`
+          title: `${focusLabel} Safe Bunks`,
+          highlight: `You can bunk ${focus.canBunk} ${focus.canBunk === 1 ? "class" : "classes"}`,
+          detail: `In ${focusLabel}, you are at ${formatPct(focus.percentage)} (${focus.attended}/${focus.total}). Skipping ${focus.canBunk} keeps you at ${afterPct}% (target ${metrics.targetPct}%).`
         });
       } else {
         const recText =
           focus.mustAttend === Infinity
-            ? "100% target cannot be recovered once a class is missed."
+            ? `100% target cannot be reached after missing a class in ${focusLabel}.`
             : focus.mustAttend > 0
-              ? `You have 0 safe bunks left; attend the next ${focus.mustAttend} in a row to reach ${metrics.targetPct}%.`
-              : `You have 0 safe bunks left (right on the ${metrics.targetPct}% boundary).`;
+              ? `In ${focusLabel}, you are at ${formatPct(focus.percentage)} (${focus.attended}/${focus.total}) with 0 safe bunks left. Attend the next ${focus.mustAttend} in a row to reach ${metrics.targetPct}%.`
+              : `In ${focusLabel}, you are right at ${formatPct(focus.percentage)} (${metrics.targetPct}% target) — attend the next class to build a buffer.`;
         blocks.push({
-          title: `${focusLabel} Safe Bunks Available`,
-          highlight: "0 classes",
+          title: `${focusLabel} Safe Bunks`,
+          highlight: "0 bunks left",
           detail: recText
         });
       }
@@ -1593,20 +1725,20 @@
     if (intents.includes("MUST_ATTEND") && !intents.includes("CAN_BUNK") && !intents.includes("SUMMARY")) {
       if (focus.mustAttend === Infinity) {
         blocks.push({
-          title: `${focusLabel} Recovery Requirement`,
+          title: `${focusLabel} Recovery`,
           highlight: "Unreachable at 100%",
-          detail: `Since ${focus.burned} class(es) were burned, 100% is unreachable.`
+          detail: `Since ${focus.burned} class(es) were missed in ${focusLabel}, 100% is unreachable.`
         });
       } else if (focus.mustAttend > 0) {
         blocks.push({
-          title: `${focusLabel} Classes to Attend for ${metrics.targetPct}%`,
+          title: `${focusLabel} Classes Needed for ${metrics.targetPct}%`,
           highlight: `Attend next ${focus.mustAttend}`,
-          detail: `Formula R = ceil((${metrics.targetPct}*${focus.total} - 100*${focus.attended}) / (100 - ${metrics.targetPct})) = ${focus.mustAttend}.`
+          detail: `In ${focusLabel} (${focus.attended}/${focus.total} = ${formatPct(focus.percentage)}), attending ${focus.mustAttend} consecutive classes brings you to ${metrics.targetPct}%.`
         });
       } else {
         blocks.push({
-          title: `${focusLabel} Recovery Requirement`,
-          highlight: "0 needed (already safe)",
+          title: `${focusLabel} Recovery`,
+          highlight: "Already on target",
           detail: `${focusLabel} is already at ${formatPct(focus.percentage)} (>= ${metrics.targetPct}%).`
         });
       }
@@ -1631,31 +1763,30 @@
       const daySubjects = currentState?.timetable?.[dayName] || [];
       if (isHoliday) {
         blocks.push({
-          title: `${dayName} Schedule Check`,
+          title: `${dayName} Schedule`,
           highlight: "Weekly Holiday",
-          detail: `${dayName} is configured as a weekly holiday — 0 classes scheduled.`
+          detail: `${dayName} is set as a weekly holiday — no classes scheduled.`
         });
       } else if (daySubjects.length === 0) {
         blocks.push({
-          title: `${dayName} Schedule Check`,
+          title: `${dayName} Schedule`,
           highlight: "No classes scheduled",
           detail: `Your timetable has no classes listed on ${dayName}.`
         });
       } else {
-        // Count repeated subjects on that same day so simultaneous bunks are accounted for!
         const dayCounts = {};
         daySubjects.forEach((s) => { dayCounts[s] = (dayCounts[s] || 0) + 1; });
         const lines = Object.entries(dayCounts).map(([sub, cnt]) => {
           const m = metrics.subjects.find((x) => x.subject === sub);
-          if (!m || m.total === 0) return `${sub} (${cnt}x): no baseline data`;
+          if (!m || m.total === 0) return `${sub} (${cnt}x): no data yet`;
           const sim = simulateWhatIf(m.attended, m.total, 0, cnt, metrics.targetPct);
           const safe = sim.percentage >= metrics.targetPct;
           return `${sub} (${cnt}x): ${safe ? "SAFE to skip" : "DO NOT SKIP"} -> ${formatPct(sim.percentage)}`;
         });
         blocks.push({
-          title: `${dayName} Bunk Feasibility (${daySubjects.length} classes)`,
-          highlight: lines.every((l) => l.includes("SAFE to skip")) ? "All classes safe to bunk" : "Caution on some subjects",
-          detail: lines.join(" | ")
+          title: `${dayName} Bunk Check (${daySubjects.length} classes)`,
+          highlight: lines.every((l) => l.includes("SAFE to skip")) ? "All classes safe to bunk" : "Some subjects need attendance",
+          detail: lines.join(" • ")
         });
       }
     }
@@ -1664,9 +1795,9 @@
     if (intents.includes("SEMESTER_HORIZON")) {
       if (!metrics.horizonEnabled) {
         blocks.push({
-          title: "Semester Horizon Projection",
+          title: "Semester Forecast",
           highlight: "End date not set",
-          detail: "Set a Semester End Date in Setup & Timetable to calculate total remaining scheduled classes and full-semester bunk budget."
+          detail: "Set a Semester End Date in Setup & Timetable to see remaining scheduled classes."
         });
       } else {
         const h = focus === ov ? ov.horizon : focus;
@@ -1675,21 +1806,15 @@
         const future = focus === ov ? h.futureClasses : focus.futureClasses;
         const maxPct = focus === ov ? h.maxAchievablePct : focus.maxAchievablePct;
         blocks.push({
-          title: `${focusLabel} Semester-End Forecast`,
+          title: `${focusLabel} Semester Forecast`,
           highlight: margin >= 0 ? `${margin} semester bunks left` : `${Math.abs(margin)} short of target`,
-          detail: `${future} upcoming classes scheduled. Full-semester bunk budget = ${budget} (burned ${focus.burned}). Max achievable = ${formatPct(maxPct)}.`
+          detail: `${future} upcoming classes scheduled. Full-semester bunk budget is ${budget} (missed ${focus.burned}). Max achievable = ${formatPct(maxPct)}.`
         });
       }
     }
 
-    // 8. Per-Subject Breakdown Rows (always returned for multi-subject / explicit per-subject / summary / burned / can_bunk)
-    const includeBreakdown =
-      params.perSubjectExplicit ||
-      !isSingleSubject ||
-      intents.includes("SUMMARY") ||
-      intents.includes("CAN_BUNK") ||
-      intents.includes("BURNED") ||
-      intents.includes("PERCENTAGE");
+    // Only include per-subject breakdown when user asked broadly (no single subject) or explicitly asked per-subject
+    const includeBreakdown = !isSingleSubject || params.perSubjectExplicit || intents.includes("SUMMARY");
 
     const perSubjectRows = includeBreakdown
       ? targetSubjects.map((s) => ({
@@ -1705,6 +1830,10 @@
         }))
       : [];
 
+    const quickReplies = isSingleSubject
+      ? buildSuggestedQuestions(subjectNames, focus.subject)
+      : [];
+
     return {
       query,
       intents,
@@ -1712,154 +1841,9 @@
       matchedSubjects: matchedNames,
       metrics,
       blocks,
-      perSubjectRows
+      perSubjectRows,
+      quickReplies
     };
-  }
-
-  function injectAiBoardStyles() {
-    if (typeof document === "undefined" || getEl("bunksmart-ai-board-styles")) return;
-    const style = document.createElement("style");
-    style.id = "bunksmart-ai-board-styles";
-    style.textContent = `
-      .ai-board-card {
-        margin-top: 1.5rem;
-        padding: 1.25rem;
-        border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        background: rgba(255, 255, 255, 0.88);
-        color: #0f172a;
-        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
-      }
-      html.dark .ai-board-card {
-        background: rgba(15, 23, 42, 0.86);
-        color: #f1f5f9;
-        border-color: rgba(148, 163, 184, 0.2);
-      }
-      .ai-board-header {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: space-between;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-      }
-      .ai-board-title { font-size: 1.15rem; font-weight: 700; margin: 0; }
-      .ai-board-subtitle { font-size: 0.82rem; opacity: 0.75; margin: 0.15rem 0 0; }
-      .ai-kpi-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-      }
-      .ai-kpi-box {
-        padding: 0.75rem 0.9rem;
-        border-radius: 12px;
-        background: rgba(148, 163, 184, 0.1);
-        border: 1px solid rgba(148, 163, 184, 0.18);
-      }
-      .ai-kpi-label { font-size: 0.75rem; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.04em; }
-      .ai-kpi-value { font-size: 1.35rem; font-weight: 700; margin-top: 0.2rem; }
-      .ai-kpi-sub { font-size: 0.75rem; opacity: 0.75; margin-top: 0.15rem; }
-      .ai-chart-tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-      .ai-tab-btn {
-        padding: 0.35rem 0.75rem;
-        border-radius: 999px;
-        border: 1px solid rgba(99, 102, 241, 0.35);
-        background: transparent;
-        color: inherit;
-        font-size: 0.8rem;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      .ai-tab-btn.active {
-        background: #4f46e5;
-        color: #ffffff;
-        border-color: #4f46e5;
-      }
-      .ai-chart-wrap {
-        width: 100%;
-        overflow-x: auto;
-        padding: 0.75rem;
-        border-radius: 12px;
-        background: rgba(148, 163, 184, 0.08);
-        margin-bottom: 1rem;
-      }
-      .ai-table-wrap { overflow-x: auto; margin-bottom: 1rem; }
-      .ai-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-      .ai-table th, .ai-table td {
-        padding: 0.5rem 0.65rem;
-        text-align: left;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-      }
-      .ai-table th { font-weight: 600; opacity: 0.8; font-size: 0.78rem; text-transform: uppercase; }
-      .ai-badge {
-        display: inline-block;
-        padding: 0.15rem 0.55rem;
-        border-radius: 999px;
-        font-size: 0.75rem;
-        font-weight: 600;
-      }
-      .ai-badge-safe { background: rgba(16, 185, 129, 0.15); color: #059669; }
-      .ai-badge-warning { background: rgba(245, 158, 11, 0.16); color: #d97706; }
-      .ai-badge-danger { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
-      .ai-badge-neutral { background: rgba(148, 163, 184, 0.2); color: #64748b; }
-      html.dark .ai-badge-safe { color: #34d399; }
-      html.dark .ai-badge-warning { color: #fbbf24; }
-      html.dark .ai-badge-danger { color: #f87171; }
-      html.dark .ai-badge-neutral { color: #94a3b8; }
-      .ai-chip-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
-      .ai-chip {
-        padding: 0.3rem 0.65rem;
-        border-radius: 999px;
-        border: 1px solid rgba(148, 163, 184, 0.3);
-        background: rgba(148, 163, 184, 0.1);
-        color: inherit;
-        font-size: 0.78rem;
-        cursor: pointer;
-      }
-      .ai-chip:hover { border-color: #6366f1; }
-      .ai-query-form { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
-      .ai-query-input {
-        flex: 1;
-        padding: 0.55rem 0.8rem;
-        border-radius: 10px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        background: transparent;
-        color: inherit;
-        font-size: 0.9rem;
-      }
-      .ai-query-btn {
-        padding: 0.55rem 1rem;
-        border-radius: 10px;
-        border: none;
-        background: #4f46e5;
-        color: #fff;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      .ai-feed { display: flex; flex-direction: column; gap: 0.65rem; }
-      .ai-msg {
-        padding: 0.75rem 0.9rem;
-        border-radius: 12px;
-        border: 1px solid rgba(148, 163, 184, 0.2);
-        background: rgba(148, 163, 184, 0.08);
-      }
-      .ai-msg-q { font-weight: 600; font-size: 0.88rem; margin-bottom: 0.45rem; color: #4f46e5; }
-      html.dark .ai-msg-q { color: #818cf8; }
-      .ai-block-item { margin-top: 0.35rem; font-size: 0.86rem; line-height: 1.4; }
-      .ai-formula-details { margin-top: 0.75rem; font-size: 0.82rem; opacity: 0.9; }
-      .ai-formula-code {
-        margin-top: 0.4rem;
-        padding: 0.65rem;
-        border-radius: 8px;
-        background: rgba(15, 23, 42, 0.08);
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 0.78rem;
-        white-space: pre-wrap;
-      }
-      html.dark .ai-formula-code { background: rgba(0, 0, 0, 0.3); }
-    `;
-    document.head.appendChild(style);
   }
 
   function buildAiChartSvg(metrics, mode) {
@@ -1966,204 +1950,312 @@
     `;
   }
 
-  function resolveAiBoardHost() {
-    if (typeof document === "undefined") return null;
-    const explicit = getEl("ai-board-widget") || getEl("ai-chart-board") || getEl("view-ai-board");
-    if (explicit) return explicit;
+  /* --- CHATGPT-STYLE SIDE ASSISTANT DRAWER --- */
+  let chatDrawerOpen = false;
+  let chatMode = "chat"; // "chat" | "charts"
 
-    let autoHost = getEl("ai-board-auto-host");
-    if (!autoHost) {
-      const parent = getEl("view-home") || document.querySelector("main") || document.body;
-      if (!parent) return null;
-      autoHost = document.createElement("section");
-      autoHost.id = "ai-board-auto-host";
-      parent.appendChild(autoHost);
+  function openChatDrawer(initialMode) {
+    const drawer = getEl("chat-drawer");
+    const backdrop = getEl("chat-backdrop");
+    if (!drawer || !backdrop) return;
+
+    if (initialMode === "charts" || initialMode === "chat") {
+      chatMode = initialMode;
     }
-    return autoHost;
+
+    chatDrawerOpen = true;
+    drawer.classList.remove("hidden");
+    backdrop.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+
+    // Close mobile sidebar if open
+    const sidebar = getEl("sidebar");
+    const overlay = getEl("sidebar-overlay");
+    if (sidebar) sidebar.classList.add("-translate-x-full");
+    if (overlay) overlay.classList.add("hidden", "opacity-0");
+
+    renderChatDrawer();
+    if (chatMode === "chat") {
+      setTimeout(() => {
+        const inp = getEl("chat-input");
+        if (inp) inp.focus();
+      }, 60);
+    }
   }
 
-  function renderAiBoard() {
-    const host = resolveAiBoardHost();
-    if (!host) return;
-    injectAiBoardStyles();
+  function closeChatDrawer() {
+    const drawer = getEl("chat-drawer");
+    const backdrop = getEl("chat-backdrop");
+    if (!drawer || !backdrop) return;
+    chatDrawerOpen = false;
+    drawer.classList.add("hidden");
+    backdrop.classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+
+  function setChatMode(mode) {
+    chatMode = mode === "charts" ? "charts" : "chat";
+    renderChatDrawer();
+  }
+
+  function renderChatMessages() {
+    const container = getEl("chat-messages");
+    if (!container) return;
 
     const metrics = computeAllMetrics(state);
-    const ov = metrics.overall;
-
-    if (aiBoardMessages.length === 0) {
-      aiBoardMessages.push(
-        runAlgorithmicBoardQuery("How many classes burned, how many can I bunk, what is my attendance percentage, and each subject?", state)
-      );
-    }
-
-    const latestMessages = aiBoardMessages.slice(-4).reverse();
     const firstSub = metrics.subjects[0]?.subject || "Maths";
-    const quickPrompts = [
-      "How many classes have I burned?",
+    const starterPrompts = [
       "How many classes can I bunk?",
-      "What is my attendance percentage?",
-      "How many classes to bunk in each subject?",
+      "How many classes have I burned?",
       "Can I bunk today?",
       `What if I bunk 2 in ${firstSub}?`
     ];
 
-    window.setAiBoardChartMode = function (mode) {
-      aiBoardChartMode = mode === "counts" ? "counts" : "percentage";
-      renderAiBoard();
-    };
+    if (aiBoardMessages.length === 0) {
+      container.innerHTML = `
+        <div class="chat-welcome">
+          <div class="chat-welcome-icon" aria-hidden="true">✦</div>
+          <h3>Ask anything about your attendance</h3>
+          <p>Tap a question below or type your own to get instant answers from your schedule.</p>
+          <div class="chat-starter-grid">
+            ${starterPrompts
+              .map(
+                (p) =>
+                  `<button type="button" class="chat-starter-btn" onclick="askChatAssistant('${escapeHtml(p).replace(/'/g, "\\'")}')">${escapeHtml(p)}</button>`
+              )
+              .join("")}
+          </div>
+        </div>
+      `;
+      return;
+    }
 
-    window.askAiBoard = function (promptText) {
-      const q = String(promptText || "").trim();
-      if (!q) return;
-      const result = runAlgorithmicBoardQuery(q, state);
-      aiBoardMessages.push(result);
-      renderAiBoard();
-    };
-
-    const tableRowsHtml =
-      metrics.subjects.length === 0
-        ? `<tr><td colspan="6">No subjects added yet.</td></tr>`
-        : metrics.subjects
-            .map(
-              (s) => `
-          <tr>
-            <td><strong>${escapeHtml(s.subject)}</strong></td>
-            <td>${s.attended}</td>
-            <td>${s.burned}</td>
-            <td>${s.total}</td>
-            <td>${formatPct(s.percentage)}</td>
-            <td><span class="ai-badge ai-badge-${s.status}">${escapeHtml(formatSubjectActionText(s))}</span></td>
-          </tr>
-        `
-            )
-            .join("");
-
-    const feedHtml = latestMessages
+    container.innerHTML = aiBoardMessages
       .map((msg) => {
         const blocksHtml = msg.blocks
           .map(
             (b) => `
-          <div class="ai-block-item">
-            <strong>${escapeHtml(b.title)}:</strong> <span>${escapeHtml(b.highlight)}</span>
-            <div style="opacity:0.8;font-size:0.8rem;">${escapeHtml(b.detail)}</div>
-          </div>
-        `
+            <div class="chat-answer-block">
+              <div class="chat-answer-title">${escapeHtml(b.title)}</div>
+              <div class="chat-answer-highlight">${escapeHtml(b.highlight)}</div>
+              <div class="chat-answer-detail">${escapeHtml(b.detail)}</div>
+            </div>
+          `
           )
           .join("");
 
-        const miniSubHtml =
-          msg.perSubjectRows.length > 0
-            ? `<div style="margin-top:0.45rem;font-size:0.8rem;opacity:0.9;">
-                <strong>Per-Subject:</strong>
-                ${msg.perSubjectRows
-                  .map(
-                    (r) =>
-                      `${escapeHtml(r.subject)}: ${formatPct(r.percentage)} (Burned ${r.burned}, ${escapeHtml(r.actionText)})`
-                  )
-                  .join(" • ")}
-              </div>`
+        const breakdownHtml =
+          msg.perSubjectRows && msg.perSubjectRows.length > 0
+            ? `
+            <div class="chat-mini-list">
+              ${msg.perSubjectRows
+                .map(
+                  (r) => `
+                  <div class="chat-mini-item">
+                    <span><strong>${escapeHtml(r.subject)}</strong> (${formatPct(r.percentage)})</span>
+                    <span class="pill-muted">${escapeHtml(r.actionText)}</span>
+                  </div>
+                `
+                )
+                .join("")}
+            </div>
+          `
+            : "";
+
+        const quickRepliesHtml =
+          msg.quickReplies && msg.quickReplies.length > 0
+            ? `
+            <div class="chat-quick-replies">
+              ${msg.quickReplies
+                .map(
+                  (qr) =>
+                    `<button type="button" class="chat-reply-chip" onclick="askChatAssistant('${escapeHtml(qr).replace(/'/g, "\\'")}')">${escapeHtml(qr)}</button>`
+                )
+                .join("")}
+            </div>
+          `
             : "";
 
         return `
-          <div class="ai-msg">
-            <div class="ai-msg-q">Q: ${escapeHtml(msg.query)}</div>
-            ${blocksHtml}
-            ${miniSubHtml}
+          <div class="chat-msg-row">
+            <div class="chat-bubble-user">${escapeHtml(msg.query)}</div>
+            <div class="chat-bubble-bot">
+              ${blocksHtml}
+              ${breakdownHtml}
+            </div>
+            ${quickRepliesHtml}
           </div>
         `;
       })
       .join("");
 
-    host.innerHTML = `
-      <div class="ai-board-card">
-        <div class="ai-board-header">
-          <div>
-            <h2 class="ai-board-title">Algorithmic AI Chart &amp; Query Board</h2>
-            <p class="ai-board-subtitle">100% deterministic math engine — zero external AI calls</p>
-          </div>
-          <div class="ai-chart-tabs">
-            <button type="button" class="ai-tab-btn ${aiBoardChartMode === "percentage" ? "active" : ""}" onclick="setAiBoardChartMode('percentage')">Attendance % Chart</button>
-            <button type="button" class="ai-tab-btn ${aiBoardChartMode === "counts" ? "active" : ""}" onclick="setAiBoardChartMode('counts')">Attended / Burned / Bunkable</button>
-          </div>
-        </div>
+    container.scrollTop = container.scrollHeight;
+  }
 
-        <div class="ai-kpi-grid">
-          <div class="ai-kpi-box">
-            <div class="ai-kpi-label">Attendance %</div>
-            <div class="ai-kpi-value">${formatPct(ov.percentage)}</div>
-            <div class="ai-kpi-sub">${ov.attended} / ${ov.total} classes (Target ${metrics.targetPct}%)</div>
-          </div>
-          <div class="ai-kpi-box">
-            <div class="ai-kpi-label">Classes Burned</div>
-            <div class="ai-kpi-value">${ov.burned}</div>
-            <div class="ai-kpi-sub">Total missed across ${metrics.subjects.length} subjects</div>
-          </div>
-          <div class="ai-kpi-box">
-            <div class="ai-kpi-label">Overall Can Bunk</div>
-            <div class="ai-kpi-value">${ov.canBunk}</div>
-            <div class="ai-kpi-sub">${ov.mustAttend > 0 && Number.isFinite(ov.mustAttend) ? `Need next ${ov.mustAttend} in a row` : "Safe consecutive skips"}</div>
-          </div>
-          <div class="ai-kpi-box">
-            <div class="ai-kpi-label">Subject Safe Sum</div>
-            <div class="ai-kpi-value">${metrics.sumSubjectCanBunk}</div>
-            <div class="ai-kpi-sub">Sum of per-subject safe skips</div>
-          </div>
-        </div>
+  function renderChatCharts() {
+    const host = getEl("chat-charts-body");
+    if (!host) return;
 
-        <div class="ai-chart-wrap">${buildAiChartSvg(metrics, aiBoardChartMode)}</div>
+    const metrics = computeAllMetrics(state);
+    const ov = metrics.overall;
 
-        <div class="ai-table-wrap">
-          <table class="ai-table">
-            <thead>
-              <tr>
-                <th>Subject</th>
-                <th>Attended (A)</th>
-                <th>Burned (B)</th>
-                <th>Total (T)</th>
-                <th>Attendance %</th>
-                <th>Bunk / Recovery Status</th>
-              </tr>
-            </thead>
-            <tbody>${tableRowsHtml}</tbody>
-          </table>
-        </div>
-
-        <div class="ai-chip-row">
-          ${quickPrompts
+    const tableRowsHtml =
+      metrics.subjects.length === 0
+        ? `<tr><td colspan="5">No subjects added yet.</td></tr>`
+        : metrics.subjects
             .map(
-              (p) =>
-                `<button type="button" class="ai-chip" onclick="askAiBoard('${escapeHtml(p).replace(/'/g, "\\'")}')">${escapeHtml(p)}</button>`
+              (s) => `
+          <tr>
+            <td><strong>${escapeHtml(s.subject)}</strong></td>
+            <td>${s.attended}/${s.total}</td>
+            <td>${s.burned}</td>
+            <td>${formatPct(s.percentage)}</td>
+            <td><span class="pct-pill status-${s.status}" style="font-size:11px;padding:3px 8px;">${escapeHtml(formatSubjectActionText(s))}</span></td>
+          </tr>
+        `
             )
-            .join("")}
+            .join("");
+
+    host.innerHTML = `
+      <div class="chat-kpi-grid">
+        <div class="chat-kpi-card">
+          <div class="chat-kpi-lbl">Overall</div>
+          <div class="chat-kpi-val">${formatPct(ov.percentage)}</div>
+          <div class="chat-kpi-sub">${ov.attended} / ${ov.total} (Target ${metrics.targetPct}%)</div>
         </div>
+        <div class="chat-kpi-card">
+          <div class="chat-kpi-lbl">Safe Skips</div>
+          <div class="chat-kpi-val">${ov.canBunk}</div>
+          <div class="chat-kpi-sub">${ov.mustAttend > 0 && Number.isFinite(ov.mustAttend) ? `Need next ${ov.mustAttend}` : `Burned ${ov.burned} total`}</div>
+        </div>
+      </div>
 
-        <form id="ai-board-form" class="ai-query-form">
-          <input type="text" id="ai-board-input" class="ai-query-input" placeholder="Ask e.g. 'How many burned?', 'Can I bunk in Maths?', 'What if I bunk 2 in CS?'" aria-label="Ask the algorithmic AI board">
-          <button type="submit" class="ai-query-btn">Compute</button>
-        </form>
+      <div class="chat-chart-toggle">
+        <button type="button" class="ai-tab-btn ${aiBoardChartMode === "percentage" ? "active" : ""}" onclick="setChatChartMode('percentage')">% vs Target</button>
+        <button type="button" class="ai-tab-btn ${aiBoardChartMode === "counts" ? "active" : ""}" onclick="setChatChartMode('counts')">Attended / Burned</button>
+      </div>
 
-        <div class="ai-feed">${feedHtml}</div>
+      <div class="chat-chart-box">${buildAiChartSvg(metrics, aiBoardChartMode)}</div>
 
-        <details class="ai-formula-details">
-          <summary>Mathematical Form &amp; Algorithms Used</summary>
-          <pre class="ai-formula-code">1. Burned Classes:        B_i = T_i - A_i
-2. Attendance %:          P_i = (A_i / T_i) * 100
-3. Safe Bunks (P_i >= t): S_i = floor((100 * A_i - t * T_i) / t)
-4. Recovery   (P_i <  t): R_i = ceil((t * T_i - 100 * A_i) / (100 - t))
-5. Overall Aggregation:   A_tot = sum(A_i), T_tot = sum(T_i), B_tot = T_tot - A_tot
-6. Query Pipeline:        Normalize -> Levenshtein Subject Match -> Weighted Intent Scoring -> Exact Solver</pre>
-        </details>
+      <div class="chat-table-wrap">
+        <table class="chat-table">
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th>Att/Tot</th>
+              <th>Missed</th>
+              <th>%</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>${tableRowsHtml}</tbody>
+        </table>
       </div>
     `;
+  }
 
-    const form = getEl("ai-board-form");
-    const input = getEl("ai-board-input");
-    if (form && input) {
-      form.onsubmit = (e) => {
-        e.preventDefault();
-        window.askAiBoard(input.value);
-      };
+  function renderChatDrawer() {
+    const tabChat = getEl("chat-tab-chat");
+    const tabCharts = getEl("chat-tab-charts");
+    const panelChat = getEl("chat-panel-chat");
+    const panelCharts = getEl("chat-panel-charts");
+
+    if (tabChat) {
+      tabChat.classList.toggle("active", chatMode === "chat");
+      tabChat.setAttribute("aria-selected", String(chatMode === "chat"));
     }
+    if (tabCharts) {
+      tabCharts.classList.toggle("active", chatMode === "charts");
+      tabCharts.setAttribute("aria-selected", String(chatMode === "charts"));
+    }
+    if (panelChat) panelChat.classList.toggle("active", chatMode === "chat");
+    if (panelCharts) panelCharts.classList.toggle("active", chatMode === "charts");
+
+    if (chatMode === "chat") {
+      renderChatMessages();
+    } else {
+      renderChatCharts();
+    }
+  }
+
+  function initChatAssistant() {
+    const openBtn = getEl("chat-open-btn");
+    const sidebarBtn = getEl("sidebar-chat-btn");
+    const closeBtn = getEl("chat-close-btn");
+    const clearBtn = getEl("chat-clear-btn");
+    const backdrop = getEl("chat-backdrop");
+    const tabChat = getEl("chat-tab-chat");
+    const tabCharts = getEl("chat-tab-charts");
+    const form = getEl("chat-form");
+    const input = getEl("chat-input");
+
+    window.openChatAssistant = openChatDrawer;
+    window.closeChatAssistant = closeChatDrawer;
+    window.setChatChartMode = function (mode) {
+      aiBoardChartMode = mode === "counts" ? "counts" : "percentage";
+      renderChatCharts();
+    };
+    window.askChatAssistant = function (promptText) {
+      const q = String(promptText || "").trim();
+      if (!q) return;
+      const result = runAlgorithmicBoardQuery(q, state);
+      aiBoardMessages.push(result);
+      chatMode = "chat";
+      renderChatDrawer();
+    };
+
+    if (openBtn) openBtn.addEventListener("click", () => openChatDrawer("chat"));
+    if (sidebarBtn) sidebarBtn.addEventListener("click", () => openChatDrawer("chat"));
+    if (closeBtn) closeBtn.addEventListener("click", closeChatDrawer);
+    if (backdrop) backdrop.addEventListener("click", closeChatDrawer);
+    if (tabChat) tabChat.addEventListener("click", () => setChatMode("chat"));
+    if (tabCharts) tabCharts.addEventListener("click", () => setChatMode("charts"));
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        aiBoardMessages.length = 0;
+        chatMode = "chat";
+        renderChatDrawer();
+        showToast("Started a fresh chat.", "info");
+      });
+    }
+
+    if (form && input) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const q = input.value.trim();
+        if (!q) return;
+        input.value = "";
+        window.askChatAssistant(q);
+      });
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && chatDrawerOpen) {
+        closeChatDrawer();
+      }
+    });
+  }
+
+  function initGuideBanner() {
+    const banner = getEl("guide-banner");
+    const btn = getEl("guide-toggle-btn");
+    const chevron = getEl("guide-chevron");
+    if (!banner || !btn) return;
+
+    // Collapse by default on narrow mobile screens so dashboard cards appear immediately
+    const startCollapsed = typeof window !== "undefined" && window.innerWidth < 640;
+    if (startCollapsed) {
+      banner.classList.add("collapsed");
+      btn.setAttribute("aria-expanded", "false");
+      if (chevron) chevron.textContent = "▸";
+    }
+
+    btn.addEventListener("click", () => {
+      const collapsed = banner.classList.toggle("collapsed");
+      btn.setAttribute("aria-expanded", String(!collapsed));
+      if (chevron) chevron.textContent = collapsed ? "▸" : "▾";
+    });
   }
 
   const publicApi = {
@@ -2191,13 +2283,18 @@
     renderRollCallWidget();
     renderSettings();
     renderPredictor();
+    if (chatDrawerOpen) {
+      renderChatDrawer();
+    }
   }
 
   /* --- INIT --- */
   function init() {
     initTheme();
     initNav();
+    initGuideBanner();
     initQuickAddSubject();
+    initChatAssistant();
     renderAll();
   }
 
