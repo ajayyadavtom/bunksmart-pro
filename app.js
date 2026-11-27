@@ -177,7 +177,8 @@
         clean.attendance[name] = {
           attended,
           total,
-          history: Array.isArray(rec.history) ? rec.history : []
+          history: Array.isArray(rec.history) ? rec.history : [],
+          manual: Boolean(rec.manual)
         };
       });
     }
@@ -2410,7 +2411,7 @@
         return;
       }
 
-      state.attendance[name] = { attended, total, history: [] };
+      state.attendance[name] = { attended, total, history: [], manual: true };
       saveState(state);
       form.reset();
       renderHome();
@@ -2871,6 +2872,12 @@
     const saveTtBtn = getEl("save-timetable");
     if (saveTtBtn) {
       saveTtBtn.onclick = () => {
+        const oldSubjects = new Set();
+        DAY_NAMES.forEach((day) => {
+          (state.timetable[day] || []).forEach((s) => oldSubjects.add(s));
+        });
+
+        const newSubjects = new Set();
         DAY_NAMES.forEach((day) => {
           const input = getEl(`tt-in-${day}`);
           if (!input) return;
@@ -2879,12 +2886,46 @@
             .map((s) => s.trim())
             .filter(Boolean);
           state.timetable[day] = subs;
-          subs.forEach((s) => ensureSubject(s));
+          subs.forEach((s) => newSubjects.add(s));
         });
+
+        const added = [];
+        newSubjects.forEach((s) => {
+          if (!state.attendance[s]) added.push(s);
+          ensureSubject(s);
+        });
+
+        const removed = [];
+        Object.keys(state.attendance).forEach((sub) => {
+          if (newSubjects.has(sub)) return;
+          const rec = state.attendance[sub];
+          const wasInOldTimetable = oldSubjects.has(sub);
+          const isOrphanedZero = !rec?.manual && rec?.attended === 0 && rec?.total === 0;
+          if (wasInOldTimetable || isOrphanedZero) {
+            delete state.attendance[sub];
+            removed.push(sub);
+          }
+        });
+
+        if (editingSubject && !state.attendance[editingSubject]) editingSubject = null;
+        if (graphSubject && !state.attendance[graphSubject]) graphSubject = null;
+        if (fullGraphSubject && !state.attendance[fullGraphSubject]) {
+          fullGraphSubject = null;
+          if (typeof window !== "undefined" && window.closeFullGraphModal) {
+            window.closeFullGraphModal();
+          }
+        }
+
         saveState(state);
-        renderHome();
-        renderRollCallWidget();
-        showToast("Timetable saved successfully!", "success");
+        renderAll();
+
+        const parts = [];
+        if (added.length > 0) parts.push(`Added: ${added.join(", ")}`);
+        if (removed.length > 0) parts.push(`Removed: ${removed.join(", ")}`);
+        showToast(
+          parts.length > 0 ? `Timetable saved! ${parts.join(" | ")}` : "Timetable saved successfully!",
+          "success"
+        );
       };
     }
 
