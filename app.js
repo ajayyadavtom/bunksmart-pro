@@ -35,6 +35,14 @@
   let phonePersistGranted = null;
   let lastFileSyncAt = null;
   let lastFileSyncStatus = "Phone DB ready";
+  let mongoSyncTimer = null;
+  let mongoSyncStatus = {
+    checked: false,
+    configured: false,
+    connected: false,
+    syncing: false,
+    label: "Local Mode (Set MONGODB_URI for Cloud Sync)"
+  };
 
   /* --- DOM & STRING HELPERS --- */
   function getEl(id) {
@@ -968,6 +976,10 @@
       syncToPhoneDatabase(s, activeUser, changedDateKey);
     }
 
+    if (activeUser && typeof fetch === "function") {
+      scheduleMongoSync(s, activeUser);
+    }
+
     if (changedDateKey && getAutoDownloadEnabled() && !phoneDirectoryHandle) {
       const monthKey = changedDateKey.slice(0, 7);
       const report = buildMonthlyAttendanceReport(s, monthKey, activeUser);
@@ -991,10 +1003,16 @@
     let isNew = false;
 
     if (existing) {
+      const existingNameLower = String(existing.name || "").trim().replace(/\s+/g, " ").toLowerCase();
+      const inputNameLower = cleanName.replace(/\s+/g, " ").toLowerCase();
+      if (existingNameLower && existingNameLower !== inputNameLower) {
+        return { error: "This USN / Roll Number belongs to a different Student Name. Enter your exact Name and USN." };
+      }
+
       const updatedUser = {
         ...existing,
-        name: cleanName || existing.name,
-        displayRollNo: displayRollNo || existing.displayRollNo,
+        name: existing.name || cleanName,
+        displayRollNo: existing.displayRollNo || displayRollNo,
         lastLoginAt: now
       };
       registry[rollNo] = updatedUser;
@@ -1047,6 +1065,204 @@
     state = initialState;
     saveState(state);
     return { isNew, user: newUser };
+  }
+
+  function applyAuthenticatedSession(userObj, remoteState) {
+    const registry = loadUsersRegistry();
+    registry[userObj.rollNo] = userObj;
+    saveUsersRegistry(registry);
+    setActiveRollNo(userObj.rollNo);
+
+    if (remoteState && typeof remoteState === "object" && remoteState.settings && remoteState.timetable) {
+      state = sanitizeState(remoteState);
+    } else {
+      state = buildSampleState();
+    }
+
+    try {
+      const serialized = JSON.stringify(state);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      localStorage.setItem(userDataStorageKey(userObj.rollNo), serialized);
+    } catch (e) {
+      // Ignore storage error
+    }
+
+    if (typeof indexedDB !== "undefined") {
+      syncToPhoneDatabase(state, userObj, null);
+    }
+  }
+
+  async function checkMongoHealth() {
+    if (typeof fetch !== "function") return;
+    try {
+      const resp = await fetch("/api/health", { cache: "no-store" });
+      if (!resp.ok) throw new Error("Health check failed");
+      const data = await resp.json();
+      mongoSyncStatus.checked = true;
+      mongoSyncStatus.configured = Boolean(data.mongoConfigured);
+      mongoSyncStatus.connected = Boolean(data.connected);
+      if (data.connected) {
+        mongoSyncStatus.label = `MongoDB Cloud Connected (${data.dbName || "bunksmart_pro"})`;
+      } else if (data.mongoConfigured && !data.driverInstalled) {
+        mongoSyncStatus.label = "MongoDB URI set — run npm install";
+      } else if (data.mongoConfigured) {
+        mongoSyncStatus.label = "MongoDB offline — using device storage";
+      } else {
+        mongoSyncStatus.label = "Device-only mode (add MONGODB_URI for MongoDB sync)";
+      }
+    } catch (e) {
+      mongoSyncStatus.checked = true;
+      mongoSyncStatus.connected = false;
+      mongoSyncStatus.label = "Offline mode (saved on this device)";
+    }
+    if (typeof document !== "undefined" && getEl("phone-storage-panel")) {
+      renderPhoneStoragePanel();
+    }
+  }
+
+  function scheduleMongoSync(snapshotState, userRecord) {
+    if (!userRecord || !userRecord.rollNo || typeof fetch !== "function") return;
+    if (!mongoSyncStatus.connected) return;
+    if (mongoSyncTimer) clearTimeout(mongoSyncTimer);
+
+    mongoSyncTimer = setTimeout(async () => {
+      if (!mongoSyncStatus.connected) return;
+      try {
+        const resp = await fetch("/api/state", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: userRecord.name,
+            rollNo: userRecord.displayRollNo || userRecord.rollNo,
+            state: snapshotState
+          })
+        });
+        if (resp.ok) {
+          mongoSyncStatus.connected = true;
+          mongoSyncStatus.configured = true;
+          mongoSyncStatus.label = `MongoDB Synced (${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`;
+          if (typeof document !== "undefined" && getEl("phone-storage-panel")) {
+            renderPhoneStoragePanel();
+          }
+        }
+      } catch (e) {
+        // Keep local data intact if offline
+      }
+    }, 350);
+  }
+
+  async function pullMongoStateForActiveUser() {
+    const activeUser = getActiveUser();
+    if (!activeUser || typeof fetch !== "function") return;
+    if (mongoSyncStatus.checked && !mongoSyncStatus.connected) return;
+    try {
+      const qs = new URLSearchParams({
+        rollNo: activeUser.displayRollNo || activeUser.rollNo,
+        name: activeUser.name
+      });
+      const resp = await fetch(`/api/state?${qs.toString()}`, { cache: "no-store" });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data.ok && data.state && data.state.settings && data.state.timetable) {
+        applyAuthenticatedSession(data.user || activeUser, data.state);
+        mongoSyncStatus.connected = true;
+        mongoSyncStatus.configured = true;
+        mongoSyncStatus.label = "MongoDB Synced";
+        renderAll();
+      }
+    } catch (e) {
+      // Offline fallback already loaded
+    }
+  }
+
+  async function loginOrRegisterUserCloud(rawName, rawRoll) {
+    const cleanName = String(rawName || "").trim();
+    const displayRollNo = String(rawRoll || "").trim();
+    const rollNo = normalizeRollNo(displayRollNo);
+    if (!cleanName || !rollNo) {
+      return { error: "Please enter both your Name and USN / Roll Number." };
+    }
+
+    // Prepare initial state to seed MongoDB if this is a brand-new account
+    let seedState = buildSampleState();
+    try {
+      const localExisting = localStorage.getItem(userDataStorageKey(rollNo));
+      if (localExisting) {
+        const parsed = JSON.parse(localExisting);
+        if (parsed && parsed.settings && parsed.timetable) seedState = sanitizeState(parsed);
+      }
+    } catch (e) {
+      seedState = buildSampleState();
+    }
+
+    if (typeof fetch === "function" && (!mongoSyncStatus.checked || mongoSyncStatus.connected)) {
+      try {
+        const resp = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: cleanName,
+            rollNo: displayRollNo,
+            initialState: seedState
+          })
+        });
+        const data = await resp.json().catch(() => ({}));
+
+        if (resp.ok && data.ok && data.user) {
+          applyAuthenticatedSession(data.user, data.state || seedState);
+          mongoSyncStatus.connected = true;
+          mongoSyncStatus.configured = true;
+          mongoSyncStatus.label = "MongoDB Cloud Synced";
+          return { isNew: Boolean(data.isNew), user: data.user, cloudSynced: true };
+        }
+
+        if (resp.status === 400 || resp.status === 401) {
+          return { error: data.error || "Name does not match this USN / Roll Number." };
+        }
+      } catch (e) {
+        // Fall back to local profile storage if server/MongoDB is unreachable
+      }
+    }
+
+    const localRes = loginOrRegisterUser(cleanName, displayRollNo);
+    return { ...localRes, cloudSynced: false };
+  }
+
+  function logoutCurrentUser() {
+    if (mongoSyncTimer) {
+      clearTimeout(mongoSyncTimer);
+      mongoSyncTimer = null;
+    }
+    setActiveRollNo("");
+    editingSubject = null;
+    graphSubject = null;
+    fullGraphOpen = false;
+    state = buildSampleState();
+
+    // When MongoDB cloud sync is active, clear all local user data from this phone on logout
+    if (mongoSyncStatus.connected) {
+      try {
+        localStorage.removeItem(USERS_REGISTRY_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+        const keysToDelete = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(USER_STATE_PREFIX)) keysToDelete.push(k);
+        }
+        keysToDelete.forEach((k) => localStorage.removeItem(k));
+      } catch (e) {
+        // Ignore storage error
+      }
+    }
+
+    const nameIn = getEl("login-name");
+    const rollIn = getEl("login-roll");
+    if (nameIn) nameIn.value = "";
+    if (rollIn) rollIn.value = "";
+
+    renderAll();
+    openLoginModal(false);
+    showToast("Logged out. Enter Name & USN to sign in.", "info");
   }
 
   let state = loadState();
@@ -4094,41 +4310,15 @@
     label.textContent = user ? `${user.name.split(" ")[0]} · ${user.displayRollNo}` : "Login";
   }
 
-  function renderSavedUsersList() {
-    const section = getEl("saved-users-section");
-    const listEl = getEl("saved-users-list");
-    if (!section || !listEl) return;
-
-    const users = Object.values(loadUsersRegistry()).sort((a, b) =>
-      String(b.lastLoginAt || "").localeCompare(String(a.lastLoginAt || ""))
-    );
-    if (users.length === 0) {
-      section.classList.add("hidden");
-      listEl.innerHTML = "";
-      return;
-    }
-
-    const activeRoll = getActiveRollNo();
-    section.classList.remove("hidden");
-    listEl.innerHTML = users
-      .map(
-        (u) => `
-      <button type="button" class="saved-user-chip ${u.rollNo === activeRoll ? "active" : ""}" onclick="selectSavedPhoneUser('${escapeHtml(u.rollNo)}')">
-        <div>
-          <strong>${escapeHtml(u.name)}</strong>
-          <div class="saved-user-meta">Roll No: ${escapeHtml(u.displayRollNo)}</div>
-        </div>
-        <span class="pill-muted">${u.rollNo === activeRoll ? "Active" : "Switch"}</span>
-      </button>
-    `
-      )
-      .join("");
-  }
-
   function openLoginModal(allowClose = Boolean(getActiveUser())) {
     const backdrop = getEl("login-backdrop");
     const modal = getEl("login-modal");
     const closeBtn = getEl("login-close-btn");
+    const form = getEl("login-form");
+    const sessionBox = getEl("active-session-box");
+    const sessionName = getEl("session-student-name");
+    const sessionRoll = getEl("session-student-roll");
+    const sessionNote = getEl("session-sync-note");
     const nameIn = getEl("login-name");
     const rollIn = getEl("login-roll");
     const hint = getEl("login-match-hint");
@@ -4138,23 +4328,30 @@
     if (closeBtn) {
       closeBtn.classList.toggle("hidden", !allowClose);
     }
-    if (nameIn && activeUser && !nameIn.value) {
-      nameIn.value = activeUser.name || "";
-    }
-    if (rollIn && activeUser && !rollIn.value) {
-      rollIn.value = activeUser.displayRollNo || "";
-    }
-    if (hint) {
-      hint.textContent = activeUser
-        ? `Currently signed in as ${activeUser.name} (${activeUser.displayRollNo}). Enter another Roll No to add/switch profile.`
-        : "Your Name and Roll Number create an offline profile saved directly in this phone's storage.";
+
+    if (activeUser) {
+      // Single-user session lock: show active user + Logout only (must log out before logging in as another student)
+      if (form) form.classList.add("hidden");
+      if (sessionBox) sessionBox.classList.remove("hidden");
+      if (sessionName) sessionName.textContent = activeUser.name;
+      if (sessionRoll) sessionRoll.textContent = `USN / Roll No: ${activeUser.displayRollNo}`;
+      if (sessionNote) {
+        sessionNote.textContent = mongoSyncStatus.connected
+          ? "Your attendance is synced to MongoDB. Logout first to sign in with another Name & USN."
+          : "Only one student can stay signed in at a time. Logout first to sign in with another Name & USN.";
+      }
+    } else {
+      if (sessionBox) sessionBox.classList.add("hidden");
+      if (form) form.classList.remove("hidden");
+      if (hint) {
+        hint.textContent = "Enter your one Name & USN / Roll Number credential to sign in.";
+      }
+      if (nameIn && typeof nameIn.focus === "function") setTimeout(() => nameIn.focus(), 30);
     }
 
-    renderSavedUsersList();
     backdrop.classList.remove("hidden");
     modal.classList.remove("hidden");
     backdrop.setAttribute("aria-hidden", "false");
-    if (nameIn && typeof nameIn.focus === "function") setTimeout(() => nameIn.focus(), 30);
   }
 
   function closeLoginModal() {
@@ -4256,8 +4453,9 @@
           <div class="phone-db-stat-val">${dailyCount} Daily Logs · ${months.length} Monthly Archives</div>
         </div>
         <div class="phone-db-stat">
-          <div class="phone-db-stat-lbl">Sync Status</div>
-          <div class="phone-db-stat-val">${escapeHtml(lastFileSyncStatus)}${phonePersistGranted ? " (Persistent)" : ""}</div>
+          <div class="phone-db-stat-lbl">Cloud &amp; Device Sync</div>
+          <div class="phone-db-stat-val">${escapeHtml(mongoSyncStatus.connected ? mongoSyncStatus.label : lastFileSyncStatus)}${phonePersistGranted && !mongoSyncStatus.connected ? " (Persistent)" : ""}</div>
+          <div class="saved-user-meta">${escapeHtml(mongoSyncStatus.label)}</div>
         </div>
       </div>
 
@@ -4269,7 +4467,7 @@
         }
         <button type="button" id="download-full-pdf-btn" class="btn-primary">📄 Download Full Report (PDF)</button>
         <button type="button" id="download-full-db-btn" class="btn-secondary">💾 Save Complete Backup (JSON)</button>
-        <button type="button" id="switch-user-btn" class="btn-secondary">👤 Switch / Add Student</button>
+        ${user ? `<button type="button" id="panel-logout-btn" class="btn-danger">🚪 Logout</button>` : ""}
       </div>
 
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
@@ -4307,8 +4505,8 @@
       };
     }
 
-    const switchBtn = getEl("switch-user-btn");
-    if (switchBtn) switchBtn.onclick = () => openLoginModal(true);
+    const panelLogoutBtn = getEl("panel-logout-btn");
+    if (panelLogoutBtn) panelLogoutBtn.onclick = logoutCurrentUser;
 
     const autoChk = getEl("auto-download-monthly-chk");
     if (autoChk) {
@@ -4337,54 +4535,49 @@
       if (getActiveUser()) closeLoginModal();
     });
 
-    if (rollIn && hint) {
-      rollIn.addEventListener("input", () => {
-        const rn = normalizeRollNo(rollIn.value);
-        const existing = rn ? loadUsersRegistry()[rn] : null;
-        if (existing) {
-          hint.textContent = `Existing profile found on this phone: ${existing.name} (${existing.displayRollNo}) — will load your saved data.`;
-          if (nameIn && !nameIn.value.trim()) nameIn.value = existing.name;
-        } else if (rn) {
-          hint.textContent = "New profile — will be created & saved in your phone storage.";
-        } else {
-          hint.textContent = "";
-        }
-      });
+    const submitBtn = getEl("login-submit-btn");
+    const modalLogoutBtn = getEl("login-logout-btn");
+    if (modalLogoutBtn) {
+      modalLogoutBtn.addEventListener("click", logoutCurrentUser);
     }
 
     if (form) {
-      form.addEventListener("submit", (e) => {
+      form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const res = loginOrRegisterUser(nameIn ? nameIn.value : "", rollIn ? rollIn.value : "");
-        if (res.error) {
-          showToast(res.error, "warning");
-          return;
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Syncing...";
         }
-        closeLoginModal();
-        renderAll();
-        restorePhoneFolderHandle();
-        showToast(
-          res.isNew
-            ? `Profile saved on phone for ${res.user.name} (${res.user.displayRollNo}).`
-            : `Welcome back, ${res.user.name} (${res.user.displayRollNo})!`,
-          "success"
-        );
+        try {
+          const res = await loginOrRegisterUserCloud(nameIn ? nameIn.value : "", rollIn ? rollIn.value : "");
+          if (res.error) {
+            showToast(res.error, "warning");
+            return;
+          }
+          closeLoginModal();
+          renderAll();
+          restorePhoneFolderHandle();
+          showToast(
+            res.cloudSynced
+              ? res.isNew
+                ? `Account saved to MongoDB for ${res.user.name} (${res.user.displayRollNo}).`
+                : `Welcome back, ${res.user.name} — data restored from MongoDB!`
+              : res.isNew
+                ? `Profile saved on device for ${res.user.name} (${res.user.displayRollNo}).`
+                : `Welcome back, ${res.user.name} (${res.user.displayRollNo})!`,
+            "success"
+          );
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Login & Sync";
+          }
+        }
       });
     }
 
     if (typeof window !== "undefined") {
-      window.selectSavedPhoneUser = function (rollNo) {
-        const reg = loadUsersRegistry();
-        const target = reg[normalizeRollNo(rollNo)];
-        if (!target) return;
-        const res = loginOrRegisterUser(target.name, target.displayRollNo);
-        if (!res.error) {
-          closeLoginModal();
-          renderAll();
-          restorePhoneFolderHandle();
-          showToast(`Switched to ${res.user.name} (${res.user.displayRollNo}).`, "success");
-        }
-      };
+      window.logoutStudent = logoutCurrentUser;
 
       window.downloadFullAttendancePdf = function () {
         const activeUser = getActiveUser();
@@ -4493,9 +4686,11 @@
     const activeUser = getActiveUser();
     if (!activeUser) {
       openLoginModal(false);
+      checkMongoHealth();
     } else {
       restorePhoneFolderHandle();
       syncToPhoneDatabase(state, activeUser);
+      checkMongoHealth().then(() => pullMongoStateForActiveUser());
     }
   }
 

@@ -17,6 +17,23 @@ Open `index.html` in any modern web browser (Chrome, Edge, Firefox, Safari) — 
    - **SGPA Calculator**: Add your subjects, credit hours, and expected grades to see your 10-point SGPA live.
    - **Final Exam (SEE) Score Needed**: Enter your internal marks and total internal maximum (20, 25, 30, 40, or 50) to see the minimum final exam score out of 100 needed to reach your target grade.
 
+## Cross-Device Login & MongoDB Cloud Sync
+
+BunkSmart Pro supports cross-device Student Login (**Name + USN / Roll Number**) backed by MongoDB (while keeping instant offline storage in `localStorage` and `IndexedDB`):
+
+1. Install dependencies once:
+   ```bash
+   npm install
+   ```
+2. Create a free MongoDB Atlas cluster (or local MongoDB instance) and copy `.env.example` to `.env`:
+   ```bash
+   MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+   MONGODB_DB=bunksmart_pro
+   ```
+3. On **Vercel**, add `MONGODB_URI` (and optionally `MONGODB_DB`) under **Project Settings → Environment Variables** and redeploy.
+
+Once configured, logging in with the same **Name + USN / Roll Number** on any phone or laptop automatically restores your timetable, attendance counts, daily marks, and SGPA—even after logging out or switching devices.
+
 ## Data & Privacy
 
 All data is stored locally in your browser via `localStorage`. You can export or import a JSON backup anytime from **Setup & Timetable**.

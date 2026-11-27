@@ -478,7 +478,7 @@
     <div id="full-graph-content" class="full-graph-content"></div>
   </section>
 
-  <!-- Student Phone-Local Login Modal -->
+  <!-- Student Login Modal (MongoDB Cloud + Phone-Local Fallback) -->
   <div id="login-backdrop" class="login-backdrop hidden" aria-hidden="true"></div>
   <section id="login-modal" class="login-modal hidden" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
     <div class="login-card">
@@ -486,9 +486,19 @@
         <div class="brand-logo" aria-hidden="true">BS</div>
         <div style="flex:1;min-width:0;">
           <h2 id="login-modal-title" class="login-title">Student Login</h2>
-          <p class="login-subtitle">Saved on your phone storage only — enter Name &amp; Roll Number.</p>
+          <p class="login-subtitle">Enter your Name &amp; USN / Roll Number to save &amp; sync your attendance across any device.</p>
         </div>
         <button type="button" id="login-close-btn" class="icon-btn hidden" aria-label="Close login">✕</button>
+      </div>
+
+      <div id="active-session-box" class="hidden">
+        <div class="phone-db-stat" style="margin-bottom: 12px;">
+          <div class="phone-db-stat-lbl">Currently Signed In</div>
+          <div id="session-student-name" class="phone-db-stat-val"></div>
+          <div id="session-student-roll" class="saved-user-meta"></div>
+        </div>
+        <p id="session-sync-note" class="helper-text" style="margin-bottom: 14px;"></p>
+        <button type="button" id="login-logout-btn" class="btn-danger" style="width: 100%;">🚪 Logout (To Sign In Another Student)</button>
       </div>
 
       <form id="login-form" class="login-form">
@@ -501,13 +511,8 @@
           <input type="text" id="login-roll" class="form-input" placeholder="e.g. 1EW24CS001" autocomplete="username" required>
         </div>
         <p id="login-match-hint" class="helper-text" style="margin-bottom: 12px;"></p>
-        <button type="submit" id="login-submit-btn" class="btn-primary" style="width: 100%;">Login &amp; Save on Phone</button>
+        <button type="submit" id="login-submit-btn" class="btn-primary" style="width: 100%;">Login &amp; Sync</button>
       </form>
-
-      <div id="saved-users-section" class="saved-users-section hidden">
-        <span class="setting-label" style="margin-top: 16px;">Saved Profiles on This Phone</span>
-        <div id="saved-users-list" class="saved-users-list"></div>
-      </div>
     </div>
   </section>
 

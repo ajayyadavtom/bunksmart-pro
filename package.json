@@ -1,10 +1,13 @@
 {
   "name": "bunksmart-pro",
   "version": "1.0.0",
-  "description": "BunkSmart Pro — Mobile-friendly attendance and grade planner",
+  "description": "BunkSmart Pro — Mobile-friendly attendance and grade planner with MongoDB sync",
   "private": true,
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js"
+  },
+  "dependencies": {
+    "mongodb": "^6.12.0"
   }
 }
