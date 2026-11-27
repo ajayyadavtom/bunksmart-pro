@@ -4451,6 +4451,33 @@
     }
   }
 
+  function initSupportSection() {
+    const copyBtn = getEl("copy-support-email-btn");
+    if (!copyBtn) return;
+
+    const supportEmail = "ajayyadavtom@zohomail.in";
+    copyBtn.addEventListener("click", async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(supportEmail);
+        } else {
+          const temp = document.createElement("textarea");
+          temp.value = supportEmail;
+          temp.setAttribute("readonly", "");
+          temp.style.position = "absolute";
+          temp.style.left = "-9999px";
+          document.body.appendChild(temp);
+          temp.select();
+          document.execCommand("copy");
+          document.body.removeChild(temp);
+        }
+        showToast(`Copied ${supportEmail}!`, "success");
+      } catch (e) {
+        showToast(`Support email: ${supportEmail}`, "info");
+      }
+    });
+  }
+
   /* --- INIT --- */
   function init() {
     initTheme();
@@ -4458,6 +4485,7 @@
     initGuideBanner();
     initQuickAddSubject();
     initChatAssistant();
+    initSupportSection();
     initStudentLogin();
     requestPersistentPhoneStorage();
     renderAll();

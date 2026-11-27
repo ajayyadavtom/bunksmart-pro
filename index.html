@@ -29,6 +29,7 @@
         <button type="button" class="top-tab" data-view="rollcall" onclick="switchView('rollcall')">✅ Daily Roll Call</button>
         <button type="button" class="top-tab" data-view="predictor" onclick="switchView('predictor')">🎓 Grade Predictor</button>
         <button type="button" class="top-tab" data-view="settings" onclick="switchView('settings')">⚙️ Setup &amp; Timetable</button>
+        <button type="button" class="top-tab" data-view="support" onclick="switchView('support')">❓ Support</button>
       </nav>
 
       <div class="topbar-actions">
@@ -60,6 +61,7 @@
       <button type="button" class="nav-item" data-view="rollcall" onclick="switchView('rollcall')">✅ Daily Roll Call</button>
       <button type="button" class="nav-item" data-view="predictor" onclick="switchView('predictor')">🎓 Grade Predictor</button>
       <button type="button" class="nav-item" data-view="settings" onclick="switchView('settings')">⚙️ Setup &amp; Timetable</button>
+      <button type="button" class="nav-item" data-view="support" onclick="switchView('support')">❓ Help &amp; Support</button>
       <button type="button" id="sidebar-chat-btn" class="nav-item">💬 Ask Assistant</button>
     </nav>
     <p class="helper-text">All your data stays privately saved in this browser—no account needed.</p>
@@ -300,12 +302,124 @@
         <div id="phone-storage-panel"></div>
       </div>
     </section>
+
+    <!-- VIEW 5: HELP & SUPPORT -->
+    <section id="view-support" class="view-section">
+      <div class="section-header">
+        <div>
+          <h2>Help, Features &amp; Support</h2>
+          <p>Learn every feature in BunkSmart Pro, get quick answers, or contact support directly.</p>
+        </div>
+      </div>
+
+      <div class="grid-2 equal">
+        <!-- All Features Guide -->
+        <div class="card">
+          <div class="card-head">
+            <h3 class="card-title">All Features Guide</h3>
+            <span class="pill-muted">Quick Tour</span>
+          </div>
+          <div class="support-feature-list">
+            <div class="support-feature-item">
+              <div class="support-feature-icon" aria-hidden="true">📊</div>
+              <div>
+                <strong>Attendance Dashboard</strong>
+                <p>Track overall and per-subject %, see exact safe-skip or recovery counts, tap <strong>📊</strong> for day-by-day graphs &amp; full monthly red/green calendars, edit counts with <strong>✎</strong>, or export a <strong>PDF</strong> report.</p>
+              </div>
+            </div>
+            <div class="support-feature-item">
+              <div class="support-feature-icon" aria-hidden="true">✅</div>
+              <div>
+                <strong>Daily Roll Call</strong>
+                <p>Mark classes <em>Present</em>, <em>Absent</em>, or <em>Cancelled</em> (tap an active button again to clear), log extra classes, or use <strong>‹ Prev</strong> &amp; <strong>📅 Calendar</strong> to edit today or past days (future dates stay locked).</p>
+              </div>
+            </div>
+            <div class="support-feature-item">
+              <div class="support-feature-icon" aria-hidden="true">🎓</div>
+              <div>
+                <strong>Grade &amp; Exam Predictor</strong>
+                <p>Compute your 10-point <strong>SGPA</strong> live from subject credits and grades, and find the exact <strong>Final Exam (SEE)</strong> marks needed from your internal score (IA).</p>
+              </div>
+            </div>
+            <div class="support-feature-item">
+              <div class="support-feature-icon" aria-hidden="true">⚙️</div>
+              <div>
+                <strong>Setup, Timetable &amp; Offline Phone DB</strong>
+                <p>Customize target %, weekly holidays, and your Monday–Sunday timetable (auto-syncs with Subject Attendance). Create offline Roll Number profiles and download monthly <strong>PDF</strong> or <strong>JSON</strong> backups.</p>
+              </div>
+            </div>
+            <div class="support-feature-item">
+              <div class="support-feature-icon" aria-hidden="true">💬</div>
+              <div>
+                <strong>Ask AI Assistant</strong>
+                <p>Tap <strong>Ask AI</strong> in the top bar anytime for instant answers on safe bunks, missed classes, what-if checks, and visual charts without cluttering your screen.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ & Contact Support -->
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0;">
+          <div class="card">
+            <div class="card-head">
+              <h3 class="card-title">Frequently Asked Questions</h3>
+            </div>
+            <div class="faq-list">
+              <details class="faq-item" open>
+                <summary>Where is my attendance data saved? Do I need an internet connection?</summary>
+                <p>Everything is saved offline directly on your device/phone browser (<code>localStorage</code> + <code>IndexedDB</code>) under your Roll Number profile. No server or internet is required after opening the app.</p>
+              </details>
+              <details class="faq-item">
+                <summary>Why can't I mark attendance for tomorrow or future dates?</summary>
+                <p>To prevent accidental future marks, Daily Roll Call only allows marking or editing <strong>Today</strong> and <strong>previous days</strong>. Future dates are locked in both the calendar and date picker.</p>
+              </details>
+              <details class="faq-item">
+                <summary>How do I add or remove subjects in my timetable?</summary>
+                <p>Open <strong>Setup &amp; Timetable</strong>, edit the comma-separated subjects for each day, and tap <strong>Save Timetable</strong>. New subjects are added and removed ones are automatically cleaned from Subject Attendance.</p>
+              </details>
+              <details class="faq-item">
+                <summary>How do I fix a wrong Present or Absent mark?</summary>
+                <p>In <strong>Daily Roll Call</strong>, select that date (using <strong>‹ Prev</strong> or <strong>📅 Calendar</strong>) and tap the highlighted button again to clear it—or tap <strong>✎</strong> next to the subject on the Dashboard to adjust totals directly.</p>
+              </details>
+              <details class="faq-item">
+                <summary>How can I download or share my attendance report?</summary>
+                <p>Tap <strong>📄 Export PDF</strong> at the top of the Dashboard for a complete report, or open <strong>Setup &amp; Timetable → Phone Storage</strong> to download any individual <strong>Month PDF</strong>.</p>
+              </details>
+              <details class="faq-item">
+                <summary>How are "Safe to skip" and "Attend next" calculated?</summary>
+                <p>If you are at or above your target (e.g. 75%), BunkSmart finds the maximum classes you can skip while keeping <code>attended / total ≥ target</code>. If below target, it tells you how many consecutive classes are needed to recover.</p>
+              </details>
+            </div>
+          </div>
+
+          <div class="card support-contact-card">
+            <div class="card-head">
+              <h3 class="card-title">Extra Support &amp; Contact</h3>
+              <span class="pill-muted">Direct Email</span>
+            </div>
+            <p class="helper-text" style="margin-top:0;margin-bottom:12px;">
+              Facing an issue, bug, or need help with BunkSmart Pro? Reach out directly via Zoho Mail and include a quick note or screenshot of what happened:
+            </p>
+            <div class="support-email-box">
+              <div>
+                <div class="support-email-label">Zoho Mail Support</div>
+                <a id="support-email-link" class="support-email-addr" href="mailto:ajayyadavtom@zohomail.in?subject=BunkSmart%20Pro%20Support">ajayyadavtom@zohomail.in</a>
+              </div>
+            </div>
+            <div class="support-contact-actions">
+              <a class="btn-primary" style="text-align:center;text-decoration:none;" href="mailto:ajayyadavtom@zohomail.in?subject=BunkSmart%20Pro%20Support">✉️ Send Email</a>
+              <button type="button" id="copy-support-email-btn" class="btn-secondary">📋 Copy Email</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <!-- Mobile Bottom Navigation -->
   <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
     <button type="button" class="mobile-nav-btn active" data-view="home" onclick="switchView('home')">
-      <span>📊</span><span>Dashboard</span>
+      <span>📊</span><span>Home</span>
     </button>
     <button type="button" class="mobile-nav-btn" data-view="rollcall" onclick="switchView('rollcall')">
       <span>✅</span><span>Roll Call</span>
@@ -315,6 +429,9 @@
     </button>
     <button type="button" class="mobile-nav-btn" data-view="settings" onclick="switchView('settings')">
       <span>⚙️</span><span>Setup</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="support" onclick="switchView('support')">
+      <span>❓</span><span>Support</span>
     </button>
   </nav>
 
