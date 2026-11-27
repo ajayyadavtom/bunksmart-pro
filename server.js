@@ -5,6 +5,8 @@ const os = require("os");
 
 const healthHandler = require("./api/health");
 const loginHandler = require("./api/auth/login");
+const verifyHandler = require("./api/auth/verify");
+const statusHandler = require("./api/auth/status");
 const stateHandler = require("./api/state");
 const { getMongoStatus } = require("./lib/mongoStore");
 
@@ -53,6 +55,12 @@ const server = http.createServer(async (req, res) => {
   }
   if (reqPath === "/api/auth/login") {
     return loginHandler(req, res);
+  }
+  if (reqPath === "/api/auth/verify") {
+    return verifyHandler(req, res);
+  }
+  if (reqPath === "/api/auth/status") {
+    return statusHandler(req, res);
   }
   if (reqPath === "/api/state") {
     return stateHandler(req, res);

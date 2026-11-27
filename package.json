@@ -1,13 +1,14 @@
 {
   "name": "bunksmart-pro",
   "version": "1.0.0",
-  "description": "BunkSmart Pro — Mobile-friendly attendance and grade planner with MongoDB sync",
+  "description": "BunkSmart Pro — Mobile-friendly attendance and grade planner with MongoDB & Zoho Mail approval",
   "private": true,
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js"
   },
   "dependencies": {
-    "mongodb": "^6.12.0"
+    "mongodb": "^6.12.0",
+    "nodemailer": "^6.9.16"
   }
 }

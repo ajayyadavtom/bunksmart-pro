@@ -501,17 +501,44 @@
         <button type="button" id="login-logout-btn" class="btn-danger" style="width: 100%;">🚪 Logout (To Sign In Another Student)</button>
       </div>
 
+      <div id="pending-approval-box" class="hidden">
+        <div class="pending-approval-card">
+          <div class="pending-spinner" aria-hidden="true">⏳</div>
+          <h3 style="margin:0 0 6px;font-size:17px;">Waiting for Admin Verification</h3>
+          <p id="pending-approval-detail" class="helper-text" style="margin:0 0 12px;"></p>
+          <p class="helper-text" style="margin:0 0 14px;">
+            An approval request was sent to <strong>ajayyadavtom@zohomail.in</strong>. Once verified from email, this screen will unlock and sync automatically.
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" id="check-approval-btn" class="btn-primary" style="flex:1 1 160px;">🔄 Check Approval Now</button>
+            <button type="button" id="cancel-approval-btn" class="btn-secondary">← Back</button>
+          </div>
+        </div>
+      </div>
+
       <form id="login-form" class="login-form">
         <div class="setting-block" style="margin-bottom: 12px;">
           <label for="login-name" class="setting-label">Student Name</label>
           <input type="text" id="login-name" class="form-input" placeholder="e.g. Ajay Yadav" autocomplete="name" required>
         </div>
-        <div class="setting-block" style="margin-bottom: 10px;">
+        <div class="setting-block" style="margin-bottom: 12px;">
           <label for="login-roll" class="setting-label">Roll Number / USN</label>
           <input type="text" id="login-roll" class="form-input" placeholder="e.g. 1EW24CS001" autocomplete="username" required>
         </div>
+        <div class="setting-block" style="margin-bottom: 10px;">
+          <label for="login-password" class="setting-label">Password</label>
+          <div class="pw-input-wrap">
+            <input type="password" id="login-password" class="form-input" minlength="8" placeholder="Min 8 chars (letters + numbers)" autocomplete="current-password" required>
+            <button type="button" id="toggle-pw-visibility" class="pw-eye-btn" aria-label="Show password" title="Show or hide password">👁</button>
+          </div>
+          <div class="pw-rules-list" aria-live="polite">
+            <span id="pw-rule-len" class="pw-rule">• At least 8 characters</span>
+            <span id="pw-rule-alpha" class="pw-rule">• Includes letters (A–Z)</span>
+            <span id="pw-rule-num" class="pw-rule">• Includes numbers (0–9)</span>
+          </div>
+        </div>
         <p id="login-match-hint" class="helper-text" style="margin-bottom: 12px;"></p>
-        <button type="submit" id="login-submit-btn" class="btn-primary" style="width: 100%;">Login &amp; Sync</button>
+        <button type="submit" id="login-submit-btn" class="btn-primary" style="width: 100%;">Login &amp; Verify</button>
       </form>
     </div>
   </section>

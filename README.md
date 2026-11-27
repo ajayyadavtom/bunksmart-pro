@@ -30,7 +30,18 @@ BunkSmart Pro supports cross-device Student Login (**Name + USN / Roll Number**)
    MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
    MONGODB_DB=bunksmart_pro
    ```
-3. On **Vercel**, add `MONGODB_URI` (and optionally `MONGODB_DB`) under **Project Settings → Environment Variables** and redeploy.
+3. **For Zoho Mail Admin Login Approval** (sends an Approve/Reject link to `ajayyadavtom@zohomail.in` whenever a new student or new device logs in):
+   - In Zoho Mail **Security → App Passwords**, generate an **App-Specific Password**.
+   - Add to `.env` (and to **Vercel → Project Settings → Environment Variables**):
+     ```bash
+     ADMIN_EMAIL=ajayyadavtom@zohomail.in
+     SMTP_HOST=smtp.zoho.in
+     SMTP_PORT=465
+     SMTP_USER=ajayyadavtom@zohomail.in
+     SMTP_PASS=<your-zoho-app-password>
+     APP_BASE_URL=https://bunksmart-seven.vercel.app
+     ```
+4. On **Vercel**, add `MONGODB_URI`, `MONGODB_DB`, and the Zoho `SMTP_*` variables under **Project Settings → Environment Variables** and redeploy.
 
 Once configured, logging in with the same **Name + USN / Roll Number** on any phone or laptop automatically restores your timetable, attendance counts, daily marks, and SGPA—even after logging out or switching devices.
 

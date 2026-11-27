@@ -2581,3 +2581,64 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Password Input & Pending Approval */
+.pw-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pw-input-wrap .form-input {
+  padding-right: 44px;
+}
+
+.pw-eye-btn {
+  position: absolute;
+  right: 6px;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  display: grid;
+  place-items: center;
+}
+
+.pw-eye-btn:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.pw-rules-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.pw-rule {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.pw-rule.ok {
+  color: var(--success);
+}
+
+.pending-approval-card {
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.pending-spinner {
+  font-size: 30px;
+  margin-bottom: 6px;
+}

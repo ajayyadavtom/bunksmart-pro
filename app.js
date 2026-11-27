@@ -5,6 +5,8 @@
   const LEGACY_STORAGE_KEYS = ["bunksmart_pro_state_v3", "bunksmart_pro_state_v2"];
   const USERS_REGISTRY_KEY = "bunksmart_users_registry_v1";
   const ACTIVE_ROLL_KEY = "bunksmart_active_roll_v1";
+  const SESSION_TOKEN_KEY = "bunksmart_session_token_v1";
+  const DEVICE_ID_KEY = "bunksmart_device_id_v1";
   const USER_STATE_PREFIX = "bunksmart_user_data_v1_";
   const AUTO_DOWNLOAD_PREF_KEY = "bunksmart_auto_download_v1";
   const PHONE_DB_NAME = "BunkSmartPhoneDB";
@@ -36,10 +38,13 @@
   let lastFileSyncAt = null;
   let lastFileSyncStatus = "Phone DB ready";
   let mongoSyncTimer = null;
+  let approvalPollTimer = null;
+  let pendingApprovalState = null; // { requestId, name, rollNo, displayRollNo }
   let mongoSyncStatus = {
     checked: false,
     configured: false,
     connected: false,
+    emailConfigured: false,
     syncing: false,
     label: "Local Mode (Set MONGODB_URI for Cloud Sync)"
   };
@@ -988,13 +993,84 @@
     }
   }
 
-  function loginOrRegisterUser(rawName, rawRoll) {
+  function validatePasswordPolicy(password) {
+    const pw = String(password ?? "");
+    if (pw.length < 8) {
+      return {
+        valid: false,
+        error: "Password must be at least 8 characters long and include both letters and numbers."
+      };
+    }
+    if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) {
+      return {
+        valid: false,
+        error: "Password must include both letters (A-Z) and numbers (0-9)."
+      };
+    }
+    return { valid: true };
+  }
+
+  async function hashLocalPassword(password, rollNo) {
+    const raw = `${rollNo}::${String(password)}`;
+    if (typeof crypto !== "undefined" && crypto.subtle && typeof TextEncoder !== "undefined") {
+      const data = new TextEncoder().encode(raw);
+      const digest = await crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    }
+    // Minimal deterministic fallback for non-secure contexts
+    let h = 2166136261;
+    for (let i = 0; i < raw.length; i++) {
+      h ^= raw.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return `fnv:${(h >>> 0).toString(16)}`;
+  }
+
+  function getDeviceId() {
+    try {
+      let id = localStorage.getItem(DEVICE_ID_KEY);
+      if (!id) {
+        id = `dev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+        localStorage.setItem(DEVICE_ID_KEY, id);
+      }
+      return id;
+    } catch (e) {
+      return "dev_fallback";
+    }
+  }
+
+  function getSessionToken() {
+    try {
+      return localStorage.getItem(SESSION_TOKEN_KEY) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function setSessionToken(token) {
+    try {
+      if (token) localStorage.setItem(SESSION_TOKEN_KEY, token);
+      else localStorage.removeItem(SESSION_TOKEN_KEY);
+    } catch (e) {
+      // Ignore storage error
+    }
+  }
+
+  async function loginOrRegisterUser(rawName, rawRoll, rawPassword = "") {
     const cleanName = String(rawName || "").trim();
     const displayRollNo = String(rawRoll || "").trim();
     const rollNo = normalizeRollNo(displayRollNo);
     if (!cleanName || !rollNo) {
       return { error: "Please enter both your Name and Roll Number." };
     }
+
+    const pwCheck = validatePasswordPolicy(rawPassword);
+    if (!pwCheck.valid) {
+      return { error: pwCheck.error };
+    }
+    const pwDigest = await hashLocalPassword(rawPassword, rollNo);
 
     const registry = loadUsersRegistry();
     const now = new Date().toISOString();
@@ -1008,11 +1084,15 @@
       if (existingNameLower && existingNameLower !== inputNameLower) {
         return { error: "This USN / Roll Number belongs to a different Student Name. Enter your exact Name and USN." };
       }
+      if (existing.passwordDigest && existing.passwordDigest !== pwDigest) {
+        return { error: "Incorrect password for this USN / Roll Number." };
+      }
 
       const updatedUser = {
         ...existing,
         name: existing.name || cleanName,
         displayRollNo: existing.displayRollNo || displayRollNo,
+        passwordDigest: existing.passwordDigest || pwDigest,
         lastLoginAt: now
       };
       registry[rollNo] = updatedUser;
@@ -1041,6 +1121,7 @@
       rollNo,
       displayRollNo,
       name: cleanName,
+      passwordDigest: pwDigest,
       createdAt: now,
       lastLoginAt: now
     };
@@ -1067,11 +1148,12 @@
     return { isNew, user: newUser };
   }
 
-  function applyAuthenticatedSession(userObj, remoteState) {
+  function applyAuthenticatedSession(userObj, remoteState, sessionToken = "") {
     const registry = loadUsersRegistry();
     registry[userObj.rollNo] = userObj;
     saveUsersRegistry(registry);
     setActiveRollNo(userObj.rollNo);
+    if (sessionToken) setSessionToken(sessionToken);
 
     if (remoteState && typeof remoteState === "object" && remoteState.settings && remoteState.timetable) {
       state = sanitizeState(remoteState);
@@ -1101,8 +1183,11 @@
       mongoSyncStatus.checked = true;
       mongoSyncStatus.configured = Boolean(data.mongoConfigured);
       mongoSyncStatus.connected = Boolean(data.connected);
+      mongoSyncStatus.emailConfigured = Boolean(data.emailConfigured);
       if (data.connected) {
-        mongoSyncStatus.label = `MongoDB Cloud Connected (${data.dbName || "bunksmart_pro"})`;
+        mongoSyncStatus.label = data.emailConfigured
+          ? `MongoDB + Email Approval Active (${data.dbName || "bunksmart_pro"})`
+          : `MongoDB Cloud Connected (${data.dbName || "bunksmart_pro"})`;
       } else if (data.mongoConfigured && !data.driverInstalled) {
         mongoSyncStatus.label = "MongoDB URI set — run npm install";
       } else if (data.mongoConfigured) {
@@ -1130,10 +1215,14 @@
       try {
         const resp = await fetch("/api/state", {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-session-token": getSessionToken()
+          },
           body: JSON.stringify({
             name: userRecord.name,
             rollNo: userRecord.displayRollNo || userRecord.rollNo,
+            sessionToken: getSessionToken(),
             state: snapshotState
           })
         });
@@ -1160,7 +1249,10 @@
         rollNo: activeUser.displayRollNo || activeUser.rollNo,
         name: activeUser.name
       });
-      const resp = await fetch(`/api/state?${qs.toString()}`, { cache: "no-store" });
+      const resp = await fetch(`/api/state?${qs.toString()}`, {
+        cache: "no-store",
+        headers: { "x-session-token": getSessionToken() }
+      });
       if (!resp.ok) return;
       const data = await resp.json();
       if (data.ok && data.state && data.state.settings && data.state.timetable) {
@@ -1175,12 +1267,72 @@
     }
   }
 
-  async function loginOrRegisterUserCloud(rawName, rawRoll) {
+  function stopApprovalPolling() {
+    if (approvalPollTimer) {
+      clearInterval(approvalPollTimer);
+      approvalPollTimer = null;
+    }
+  }
+
+  async function checkPendingApprovalOnce(manualClick = false) {
+    if (!pendingApprovalState || typeof fetch !== "function") return;
+    try {
+      const qs = new URLSearchParams({
+        requestId: pendingApprovalState.requestId,
+        rollNo: pendingApprovalState.displayRollNo,
+        name: pendingApprovalState.name
+      });
+      const resp = await fetch(`/api/auth/status?${qs.toString()}`, { cache: "no-store" });
+      const data = await resp.json().catch(() => ({}));
+
+      if (data.status === "pending") {
+        if (manualClick) showToast("Still waiting for admin approval in Zoho Mail.", "info");
+        return;
+      }
+
+      stopApprovalPolling();
+      if (data.status === "rejected" || !resp.ok) {
+        const msg = data.error || "Login request was declined by the admin.";
+        pendingApprovalState = null;
+        openLoginModal(false);
+        showToast(msg, "error");
+        return;
+      }
+
+      if (data.status === "approved" && data.user) {
+        applyAuthenticatedSession(data.user, data.state || pendingApprovalState.seedState, data.sessionToken || "");
+        pendingApprovalState = null;
+        mongoSyncStatus.connected = true;
+        mongoSyncStatus.configured = true;
+        mongoSyncStatus.label = "MongoDB Cloud Synced";
+        closeLoginModal();
+        renderAll();
+        restorePhoneFolderHandle();
+        showToast(`Verified! Welcome, ${data.user.name} (${data.user.displayRollNo})!`, "success");
+      }
+    } catch (e) {
+      if (manualClick) showToast("Could not reach server to check approval.", "warning");
+    }
+  }
+
+  function startApprovalPolling() {
+    stopApprovalPolling();
+    approvalPollTimer = setInterval(() => {
+      checkPendingApprovalOnce(false);
+    }, 4000);
+  }
+
+  async function loginOrRegisterUserCloud(rawName, rawRoll, rawPassword) {
     const cleanName = String(rawName || "").trim();
     const displayRollNo = String(rawRoll || "").trim();
     const rollNo = normalizeRollNo(displayRollNo);
     if (!cleanName || !rollNo) {
       return { error: "Please enter both your Name and USN / Roll Number." };
+    }
+
+    const pwCheck = validatePasswordPolicy(rawPassword);
+    if (!pwCheck.valid) {
+      return { error: pwCheck.error };
     }
 
     // Prepare initial state to seed MongoDB if this is a brand-new account
@@ -1203,37 +1355,53 @@
           body: JSON.stringify({
             name: cleanName,
             rollNo: displayRollNo,
+            password: rawPassword,
+            deviceId: getDeviceId(),
             initialState: seedState
           })
         });
         const data = await resp.json().catch(() => ({}));
 
+        if (resp.status === 202 && data.pendingApproval) {
+          pendingApprovalState = {
+            requestId: data.requestId,
+            name: cleanName,
+            rollNo,
+            displayRollNo,
+            seedState
+          };
+          return { pendingApproval: true, message: data.message };
+        }
+
         if (resp.ok && data.ok && data.user) {
-          applyAuthenticatedSession(data.user, data.state || seedState);
+          applyAuthenticatedSession(data.user, data.state || seedState, data.sessionToken || "");
           mongoSyncStatus.connected = true;
           mongoSyncStatus.configured = true;
           mongoSyncStatus.label = "MongoDB Cloud Synced";
           return { isNew: Boolean(data.isNew), user: data.user, cloudSynced: true };
         }
 
-        if (resp.status === 400 || resp.status === 401) {
-          return { error: data.error || "Name does not match this USN / Roll Number." };
+        if (resp.status === 400 || resp.status === 401 || resp.status === 403) {
+          return { error: data.error || "Invalid credentials." };
         }
       } catch (e) {
         // Fall back to local profile storage if server/MongoDB is unreachable
       }
     }
 
-    const localRes = loginOrRegisterUser(cleanName, displayRollNo);
+    const localRes = await loginOrRegisterUser(cleanName, displayRollNo, rawPassword);
     return { ...localRes, cloudSynced: false };
   }
 
   function logoutCurrentUser() {
+    stopApprovalPolling();
+    pendingApprovalState = null;
     if (mongoSyncTimer) {
       clearTimeout(mongoSyncTimer);
       mongoSyncTimer = null;
     }
     setActiveRollNo("");
+    setSessionToken("");
     editingSubject = null;
     graphSubject = null;
     fullGraphOpen = false;
@@ -1257,12 +1425,14 @@
 
     const nameIn = getEl("login-name");
     const rollIn = getEl("login-roll");
+    const pwIn = getEl("login-password");
     if (nameIn) nameIn.value = "";
     if (rollIn) rollIn.value = "";
+    if (pwIn) pwIn.value = "";
 
     renderAll();
     openLoginModal(false);
-    showToast("Logged out. Enter Name & USN to sign in.", "info");
+    showToast("Logged out. Enter Name, USN & password to sign in.", "info");
   }
 
   let state = loadState();
@@ -4310,17 +4480,41 @@
     label.textContent = user ? `${user.name.split(" ")[0]} · ${user.displayRollNo}` : "Login";
   }
 
+  function updatePasswordRulesUI(pw) {
+    const val = String(pw || "");
+    const lenEl = getEl("pw-rule-len");
+    const alphaEl = getEl("pw-rule-alpha");
+    const numEl = getEl("pw-rule-num");
+    if (lenEl) {
+      const ok = val.length >= 8;
+      lenEl.classList.toggle("ok", ok);
+      lenEl.textContent = `${ok ? "✓" : "•"} At least 8 characters`;
+    }
+    if (alphaEl) {
+      const ok = /[A-Za-z]/.test(val);
+      alphaEl.classList.toggle("ok", ok);
+      alphaEl.textContent = `${ok ? "✓" : "•"} Includes letters (A–Z)`;
+    }
+    if (numEl) {
+      const ok = /[0-9]/.test(val);
+      numEl.classList.toggle("ok", ok);
+      numEl.textContent = `${ok ? "✓" : "•"} Includes numbers (0–9)`;
+    }
+  }
+
   function openLoginModal(allowClose = Boolean(getActiveUser())) {
     const backdrop = getEl("login-backdrop");
     const modal = getEl("login-modal");
     const closeBtn = getEl("login-close-btn");
     const form = getEl("login-form");
     const sessionBox = getEl("active-session-box");
+    const pendingBox = getEl("pending-approval-box");
+    const pendingDetail = getEl("pending-approval-detail");
     const sessionName = getEl("session-student-name");
     const sessionRoll = getEl("session-student-roll");
     const sessionNote = getEl("session-sync-note");
     const nameIn = getEl("login-name");
-    const rollIn = getEl("login-roll");
+    const pwIn = getEl("login-password");
     const hint = getEl("login-match-hint");
     if (!backdrop || !modal) return;
 
@@ -4330,7 +4524,7 @@
     }
 
     if (activeUser) {
-      // Single-user session lock: show active user + Logout only (must log out before logging in as another student)
+      if (pendingBox) pendingBox.classList.add("hidden");
       if (form) form.classList.add("hidden");
       if (sessionBox) sessionBox.classList.remove("hidden");
       if (sessionName) sessionName.textContent = activeUser.name;
@@ -4340,11 +4534,20 @@
           ? "Your attendance is synced to MongoDB. Logout first to sign in with another Name & USN."
           : "Only one student can stay signed in at a time. Logout first to sign in with another Name & USN.";
       }
+    } else if (pendingApprovalState) {
+      if (sessionBox) sessionBox.classList.add("hidden");
+      if (form) form.classList.add("hidden");
+      if (pendingBox) pendingBox.classList.remove("hidden");
+      if (pendingDetail) {
+        pendingDetail.textContent = `${pendingApprovalState.name} (${pendingApprovalState.displayRollNo})`;
+      }
     } else {
       if (sessionBox) sessionBox.classList.add("hidden");
+      if (pendingBox) pendingBox.classList.add("hidden");
       if (form) form.classList.remove("hidden");
+      updatePasswordRulesUI(pwIn ? pwIn.value : "");
       if (hint) {
-        hint.textContent = "Enter your one Name & USN / Roll Number credential to sign in.";
+        hint.textContent = "Enter your Name, USN, and password (8+ letters & numbers). New logins require admin email approval when enabled.";
       }
       if (nameIn && typeof nameIn.focus === "function") setTimeout(() => nameIn.focus(), 30);
     }
@@ -4537,8 +4740,34 @@
 
     const submitBtn = getEl("login-submit-btn");
     const modalLogoutBtn = getEl("login-logout-btn");
+    const pwIn = getEl("login-password");
+    const togglePwBtn = getEl("toggle-pw-visibility");
+    const checkApprovalBtn = getEl("check-approval-btn");
+    const cancelApprovalBtn = getEl("cancel-approval-btn");
+
     if (modalLogoutBtn) {
       modalLogoutBtn.addEventListener("click", logoutCurrentUser);
+    }
+    if (pwIn) {
+      pwIn.addEventListener("input", () => updatePasswordRulesUI(pwIn.value));
+    }
+    if (togglePwBtn && pwIn) {
+      togglePwBtn.addEventListener("click", () => {
+        const nextType = pwIn.type === "password" ? "text" : "password";
+        pwIn.type = nextType;
+        togglePwBtn.setAttribute("aria-label", nextType === "text" ? "Hide password" : "Show password");
+        togglePwBtn.textContent = nextType === "text" ? "🙈" : "👁";
+      });
+    }
+    if (checkApprovalBtn) {
+      checkApprovalBtn.addEventListener("click", () => checkPendingApprovalOnce(true));
+    }
+    if (cancelApprovalBtn) {
+      cancelApprovalBtn.addEventListener("click", () => {
+        stopApprovalPolling();
+        pendingApprovalState = null;
+        openLoginModal(false);
+      });
     }
 
     if (form) {
@@ -4546,12 +4775,22 @@
         e.preventDefault();
         if (submitBtn) {
           submitBtn.disabled = true;
-          submitBtn.textContent = "Syncing...";
+          submitBtn.textContent = "Verifying...";
         }
         try {
-          const res = await loginOrRegisterUserCloud(nameIn ? nameIn.value : "", rollIn ? rollIn.value : "");
+          const res = await loginOrRegisterUserCloud(
+            nameIn ? nameIn.value : "",
+            rollIn ? rollIn.value : "",
+            pwIn ? pwIn.value : ""
+          );
           if (res.error) {
             showToast(res.error, "warning");
+            return;
+          }
+          if (res.pendingApproval) {
+            openLoginModal(false);
+            startApprovalPolling();
+            showToast("Approval email sent to ajayyadavtom@zohomail.in!", "info");
             return;
           }
           closeLoginModal();
@@ -4570,7 +4809,7 @@
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.textContent = "Login & Sync";
+            submitBtn.textContent = "Login & Verify";
           }
         }
       });
